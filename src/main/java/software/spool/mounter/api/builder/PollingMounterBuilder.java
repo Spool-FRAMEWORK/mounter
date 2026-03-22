@@ -2,6 +2,7 @@ package software.spool.mounter.api.builder;
 
 import software.spool.core.model.PartitionKey;
 import software.spool.core.port.EventBusEmitter;
+import software.spool.core.port.decorator.SafeEventBusEmitter;
 import software.spool.core.utils.ErrorRouter;
 import software.spool.mounter.api.Mounter;
 import software.spool.mounter.api.port.DataLakeReader;
@@ -10,6 +11,7 @@ import software.spool.mounter.api.port.MountAggregator;
 import software.spool.mounter.api.strategy.MountStrategy;
 import software.spool.mounter.api.utils.PollingPolicy;
 import software.spool.mounter.internal.control.PartitionMountHandler;
+import software.spool.mounter.internal.decorator.SafeDataMartWriter;
 import software.spool.mounter.internal.strategy.PollingMountStrategy;
 import software.spool.mounter.internal.scheduler.PollingScheduler;
 
@@ -47,7 +49,7 @@ public class PollingMounterBuilder<T, R> {
     }
 
     public PollingMounterBuilder<T, R> writingWith(DataMartWriter<R> writer) {
-        this.writer = writer;
+        this.writer = SafeDataMartWriter.of(writer);
         return this;
     }
 
@@ -57,7 +59,7 @@ public class PollingMounterBuilder<T, R> {
     }
 
     public PollingMounterBuilder<T, R> emittingWith(EventBusEmitter emitter) {
-        this.emitter = emitter;
+        this.emitter = SafeEventBusEmitter.of(emitter);
         return this;
     }
 

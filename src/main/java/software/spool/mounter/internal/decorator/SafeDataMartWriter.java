@@ -14,6 +14,10 @@ public class SafeDataMartWriter<O> implements DataMartWriter<O> {
         this.writer = writer;
     }
 
+    public static <D> DataMartWriter<D> of(DataMartWriter<D> writer) {
+        return new SafeDataMartWriter<>(writer);
+    }
+
     @Override
     public void write(PartitionKey partitionKey, Stream<O> result) {
         try {

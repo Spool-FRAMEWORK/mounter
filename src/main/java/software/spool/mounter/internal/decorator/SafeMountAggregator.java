@@ -13,6 +13,10 @@ public class SafeMountAggregator<I, O> implements MountAggregator<I, O> {
         this.aggregator = aggregator;
     }
 
+    public static <I, O> SafeMountAggregator<I, O> of(MountAggregator<I, O> aggregator) {
+        return new SafeMountAggregator<I, O>(aggregator);
+    }
+
     @Override
     public Stream<O> aggregate(Stream<I> records) {
         try {

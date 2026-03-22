@@ -14,6 +14,10 @@ public class SafeDataLakeReader<I> implements DataLakeReader<I> {
         this.reader = reader;
     }
 
+    public static <I> SafeDataLakeReader<I> of(DataLakeReader<I> reader) {
+        return new SafeDataLakeReader<>(reader);
+    }
+
     @Override
     public Stream<I> read(PartitionKey partitionKey) {
         try {

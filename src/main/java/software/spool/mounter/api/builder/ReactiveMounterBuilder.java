@@ -8,6 +8,8 @@ import software.spool.mounter.api.port.DataMartWriter;
 import software.spool.mounter.api.port.MountAggregator;
 import software.spool.mounter.api.strategy.MountStrategy;
 import software.spool.mounter.internal.control.PartitionMountHandler;
+import software.spool.mounter.internal.decorator.SafeDataLakeReader;
+import software.spool.mounter.internal.decorator.SafeDataMartWriter;
 import software.spool.mounter.internal.strategy.ReactiveMountStrategy;
 
 public class ReactiveMounterBuilder<I, O> {
@@ -35,12 +37,12 @@ public class ReactiveMounterBuilder<I, O> {
     }
 
     public ReactiveMounterBuilder<I, O> writingWith(DataMartWriter<O> writer) {
-        this.writer = writer;
+        this.writer = SafeDataMartWriter.of(writer);
         return this;
     }
 
     public ReactiveMounterBuilder<I, O> readingWith(DataLakeReader<I> reader) {
-        this.reader = reader;
+        this.reader = SafeDataLakeReader.of(reader);
         return this;
     }
 
