@@ -66,7 +66,7 @@ public class PollingMounterBuilder<T, R> {
         return this;
     }
 
-    public PollingMounterBuilder<T, R> forPartition(PartitionKey partitionKey) {
+    public PollingMounterBuilder<T, R> onPartition(PartitionKey partitionKey) {
         this.partitionKey = partitionKey;
         return this;
     }

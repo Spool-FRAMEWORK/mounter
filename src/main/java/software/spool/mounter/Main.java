@@ -19,7 +19,7 @@ public class Main {
         Map<PartitionKey, List<Object>> store = new HashMap<>();
 
         Mounter mounter = MounterBuilderFactory.polling(new InMemoryDataLakeReader<>(store))
-                .forPartition(new PartitionKey("gemini"))
+                .onPartition(new PartitionKey("gemini"))
                 .aggregatingWith(new PassThroughMountAggregator<>())
                 .writingWith(new InMemoryDataMartWriter<>())
                 .pollingWith(PollingPolicy.every(Duration.ofSeconds(10)))
