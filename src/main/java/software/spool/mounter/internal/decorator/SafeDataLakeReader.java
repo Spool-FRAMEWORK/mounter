@@ -2,7 +2,7 @@ package software.spool.mounter.internal.decorator;
 
 import software.spool.core.exception.DataLakeReadException;
 import software.spool.core.exception.SpoolException;
-import software.spool.core.model.PartitionKey;
+import software.spool.core.model.vo.PartitionKey;
 import software.spool.mounter.api.port.DataLakeReader;
 
 import java.util.stream.Stream;

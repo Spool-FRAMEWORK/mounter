@@ -2,8 +2,8 @@ package software.spool.mounter.internal.decorator;
 
 import software.spool.core.exception.DataMartWriteException;
 import software.spool.core.exception.SpoolException;
-import software.spool.core.model.PartitionKey;
 import software.spool.mounter.api.port.DataMartWriter;
+import software.spool.mounter.api.port.MountTarget;
 
 import java.util.stream.Stream;
 
@@ -19,13 +19,13 @@ public class SafeDataMartWriter<O> implements DataMartWriter<O> {
     }
 
     @Override
-    public void write(PartitionKey partitionKey, Stream<O> result) {
+    public void write(MountTarget target, Stream<O> result) {
         try {
-            writer.write(partitionKey, result);
+            writer.write(target, result);
         } catch (SpoolException e) {
             throw e;
         } catch (Exception e) {
-            throw new DataMartWriteException(partitionKey, e.getMessage());
+            throw new DataMartWriteException(target.partitionKey(), e.getMessage());
         }
     }
 }

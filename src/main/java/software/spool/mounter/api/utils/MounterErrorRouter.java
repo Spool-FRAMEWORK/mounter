@@ -1,7 +1,8 @@
 package software.spool.mounter.api.utils;
 
-import software.spool.core.port.EventBusEmitter;
-import software.spool.core.utils.ErrorRouter;
+import software.spool.core.adapter.logging.LoggerFactory;
+import software.spool.core.port.bus.EventBusEmitter;
+import software.spool.core.utils.routing.ErrorRouter;
 
 public class MounterErrorRouter {
 
@@ -9,6 +10,7 @@ public class MounterErrorRouter {
     }
 
     public static ErrorRouter defaults(EventBusEmitter bus) {
-        return new ErrorRouter();
+        return new ErrorRouter()
+                .orElse((a, b) -> LoggerFactory.getLogger(MounterErrorRouter.class).error(a.getMessage()));
     }
 }

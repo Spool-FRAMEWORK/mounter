@@ -1,7 +1,8 @@
 package software.spool.mounter.api.adapter;
 
-import software.spool.core.model.PartitionKey;
+import software.spool.core.model.vo.PartitionKey;
 import software.spool.mounter.api.port.DataMartWriter;
+import software.spool.mounter.api.port.MountTarget;
 
 import java.util.HashMap;
 import java.util.List;
@@ -12,8 +13,8 @@ public class InMemoryDataMartWriter<O> implements DataMartWriter<O> {
     private final Map<PartitionKey, List<O>> store = new HashMap<>();
 
     @Override
-    public void write(PartitionKey partitionKey, Stream<O> result) {
-        store.put(partitionKey, result.toList());
+    public void write(MountTarget target, Stream<O> result) {
+        store.put(target.partitionKey(), result.toList());
     }
 
     public List<O> getWritten(PartitionKey partitionKey) {
