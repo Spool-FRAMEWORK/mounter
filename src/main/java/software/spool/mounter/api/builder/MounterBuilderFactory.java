@@ -5,7 +5,7 @@ import software.spool.core.model.watchdog.ModuleIdentity;
 import software.spool.core.port.bus.EventBus;
 import software.spool.core.port.watchdog.ModuleHeartBeat;
 import software.spool.core.utils.polling.PollingHeartbeat;
-import software.spool.mounter.api.port.DataLakeReader;
+import software.spool.mounter.api.port.PartitionedReader;
 
 import java.util.Objects;
 
@@ -14,7 +14,7 @@ public class MounterBuilderFactory {
         return new Configuration().reactive(bus);
     }
 
-    public static <I> PollingMounterBuilder<I> polling(DataLakeReader<I> reader) {
+    public static <I> PollingMounterBuilder<I> polling(PartitionedReader<I> reader) {
         return new Configuration().polling(reader);
     }
 
@@ -31,7 +31,7 @@ public class MounterBuilderFactory {
             this(null, "mounter");
         }
 
-        public <I> PollingMounterBuilder<I> polling(DataLakeReader<I> reader) {
+        public <I> PollingMounterBuilder<I> polling(PartitionedReader<I> reader) {
             return new PollingMounterBuilder<>(reader, buildHeartbeat(watchdogUrl, moduleId));
         }
 

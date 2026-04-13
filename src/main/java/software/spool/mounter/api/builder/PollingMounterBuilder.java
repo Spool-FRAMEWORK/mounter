@@ -1,6 +1,7 @@
 package software.spool.mounter.api.builder;
 
 import software.spool.core.port.bus.EventBusEmitter;
+import software.spool.core.port.bus.Handler;
 import software.spool.core.port.decorator.SafeEventBusEmitter;
 import software.spool.core.port.watchdog.ModuleHeartBeat;
 import software.spool.core.utils.polling.PollingPolicy;
@@ -11,18 +12,18 @@ import software.spool.mounter.api.Mounter;
 import software.spool.mounter.api.port.*;
 import software.spool.mounter.api.strategy.MountStrategy;
 import software.spool.mounter.api.utils.MounterErrorRouter;
-import software.spool.mounter.internal.control.PartitionMountHandler;
+import software.spool.mounter.internal.control.AtomicMountHandler;
 import software.spool.mounter.internal.decorator.SafeDataMartWriter;
 import software.spool.mounter.internal.strategy.PollingMountStrategy;
+import software.spool.mounter.internal.utils.RecordPartitionKeyExtractor;
 
 import java.util.Objects;
 
 public class PollingMounterBuilder<T> {
-
-    private final DataLakeReader<T> reader;
+    private final PartitionedReader<T> reader;
     private final ModuleHeartBeat moduleHeartBeat;
 
-    public PollingMounterBuilder(DataLakeReader<T> reader, ModuleHeartBeat moduleHeartBeat) {
+    public PollingMounterBuilder(PartitionedReader<T> reader, ModuleHeartBeat moduleHeartBeat) {
         this.reader = reader;
         this.moduleHeartBeat = moduleHeartBeat;
     }
@@ -32,11 +33,9 @@ public class PollingMounterBuilder<T> {
     }
 
     public static class Configured<T, R> {
-
-        private final DataLakeReader<T> reader;
+        private final PartitionedReader<T> reader;
         private final ModuleHeartBeat moduleHeartBeat;
         private final MountAggregator<T, R> aggregator;
-
         private DataMartWriter<R> writer;
         private PollingPolicy policy;
         private EventBusEmitter emitter;
@@ -45,8 +44,10 @@ public class PollingMounterBuilder<T> {
         private PollingScheduler scheduler;
         private PartitionWindowPolicy partitionWindowPolicy;
         private MountCheckpoint checkpoint;
+        private MountCursor cursor;
+        private MountPartitionSchema<R> mountPartitionSchema;
 
-        private Configured(DataLakeReader<T> reader, ModuleHeartBeat moduleHeartBeat, MountAggregator<T, R> aggregator) {
+        private Configured(PartitionedReader<T> reader, ModuleHeartBeat moduleHeartBeat, MountAggregator<T, R> aggregator) {
             this.reader = reader;
             this.moduleHeartBeat = moduleHeartBeat;
             this.aggregator = aggregator;
@@ -88,16 +89,27 @@ public class PollingMounterBuilder<T> {
             return this;
         }
 
+        public Configured<T, R> cursor(MountCursor cursor) {
+            this.cursor = cursor;
+            return this;
+        }
+
         public Configured<T, R> scheduledWith(PollingScheduler scheduler) {
             this.scheduler = scheduler;
             return this;
         }
 
+        public Configured<T, R> partitioningWith(MountPartitionSchema<R> mountPartitionSchema) {
+            this.mountPartitionSchema = mountPartitionSchema;
+            return this;
+        }
+
         public Mounter build() {
-            PartitionMountHandler<T, R> handler = new PartitionMountHandler<>(
-                    reader, aggregator, emitter, writer, partitionWindowPolicy, checkpoint
-            );
             ErrorRouter router = getErrorRouter();
+            Handler<MountTarget> handler = new AtomicMountHandler<>(
+                    reader, aggregator, writer, emitter, partitionWindowPolicy, checkpoint,
+                    new RecordPartitionKeyExtractor<>(mountPartitionSchema)
+            );
             MountStrategy strategy = new PollingMountStrategy(target, handler, router, scheduler, policy);
             return new Mounter(strategy, router, moduleHeartBeat);
         }

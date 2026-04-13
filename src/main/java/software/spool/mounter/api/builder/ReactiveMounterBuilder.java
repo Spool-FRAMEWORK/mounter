@@ -1,16 +1,18 @@
 package software.spool.mounter.api.builder;
 
 import software.spool.core.port.bus.EventBus;
+import software.spool.core.port.bus.Handler;
 import software.spool.core.port.watchdog.ModuleHeartBeat;
 import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.Mounter;
 import software.spool.mounter.api.port.*;
 import software.spool.mounter.api.strategy.MountStrategy;
 import software.spool.mounter.api.utils.MounterErrorRouter;
-import software.spool.mounter.internal.control.PartitionMountHandler;
-import software.spool.mounter.internal.decorator.SafeDataLakeReader;
+import software.spool.mounter.internal.control.AtomicMountHandler;
 import software.spool.mounter.internal.decorator.SafeDataMartWriter;
+import software.spool.mounter.internal.decorator.SafePartitionedReader;
 import software.spool.mounter.internal.strategy.ReactiveMountStrategy;
+import software.spool.mounter.internal.utils.RecordPartitionKeyExtractor;
 
 import java.util.Objects;
 
@@ -18,12 +20,13 @@ public class ReactiveMounterBuilder<I, O> {
     private final EventBus bus;
     private final ModuleHeartBeat moduleHeartBeat;
     private MountTarget target;
-    private DataLakeReader<I> reader;
+    private PartitionedReader<I> reader;
     private MountAggregator<I, O> aggregator;
     private DataMartWriter<O> writer;
     private ErrorRouter errorRouter;
     private PartitionWindowPolicy partitionWindowPolicy;
     private MountCheckpoint checkpoint;
+    private MountPartitionSchema<O> mountPartitionSchema;
 
 
     public ReactiveMounterBuilder(EventBus bus, ModuleHeartBeat moduleHeartBeat) {
@@ -41,8 +44,8 @@ public class ReactiveMounterBuilder<I, O> {
         return this;
     }
 
-    public ReactiveMounterBuilder<I, O> readingWith(DataLakeReader<I> reader) {
-        this.reader = SafeDataLakeReader.of(reader);
+    public ReactiveMounterBuilder<I, O> readingWith(PartitionedReader<I> reader) {
+        this.reader = SafePartitionedReader.of(reader);
         return this;
     }
 
@@ -66,8 +69,16 @@ public class ReactiveMounterBuilder<I, O> {
         return this;
     }
 
+    public ReactiveMounterBuilder<I, O> partitioningWith(MountPartitionSchema<O> mountPartitionSchema) {
+        this.mountPartitionSchema = mountPartitionSchema;
+        return this;
+    }
+
     public Mounter build() {
-        PartitionMountHandler<I, O> handler = new PartitionMountHandler<>(reader, aggregator, bus, writer, partitionWindowPolicy, checkpoint);
+        Handler<MountTarget> handler = new AtomicMountHandler<>(
+                reader, aggregator, writer, bus, partitionWindowPolicy, checkpoint, new RecordPartitionKeyExtractor<>(mountPartitionSchema)
+        );
+
         MountStrategy strategy = new ReactiveMountStrategy(target, bus, handler, getErrorRouter());
         return new Mounter(strategy, getErrorRouter(), moduleHeartBeat);
     }

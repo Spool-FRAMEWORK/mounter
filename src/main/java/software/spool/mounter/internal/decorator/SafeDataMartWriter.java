@@ -4,6 +4,7 @@ import software.spool.core.exception.DataMartWriteException;
 import software.spool.core.exception.SpoolException;
 import software.spool.mounter.api.port.DataMartWriter;
 import software.spool.mounter.api.port.MountTarget;
+import software.spool.mounter.api.port.PartitionedRecord;
 
 import java.util.stream.Stream;
 
@@ -19,13 +20,13 @@ public class SafeDataMartWriter<O> implements DataMartWriter<O> {
     }
 
     @Override
-    public void write(MountTarget target, Stream<O> result) {
+    public void write(MountTarget target, Stream<PartitionedRecord<O>> result) {
         try {
             writer.write(target, result);
         } catch (SpoolException e) {
             throw e;
         } catch (Exception e) {
-            throw new DataMartWriteException(target.partitionKey(), e.getMessage());
+            throw new DataMartWriteException(target.sourceKey(), e.getMessage());
         }
     }
 }
