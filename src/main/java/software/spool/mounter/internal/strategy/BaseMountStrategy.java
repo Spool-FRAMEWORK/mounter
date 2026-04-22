@@ -1,6 +1,5 @@
 package software.spool.mounter.internal.strategy;
 
-import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.Handler;
 import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.port.MountTarget;

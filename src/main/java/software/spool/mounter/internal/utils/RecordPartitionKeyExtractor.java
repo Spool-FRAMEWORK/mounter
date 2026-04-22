@@ -15,11 +15,8 @@ public class RecordPartitionKeyExtractor<O> implements PartitionKeyExtractor<O> 
 
     public RecordPartitionKeyExtractor(MountPartitionSchema<O> schema) {
         Class<O> recordClass = schema.recordClass();
-
-        if (!recordClass.isRecord()) {
+        if (!recordClass.isRecord())
             throw new IllegalArgumentException("Output class must be a Java Record: " + recordClass.getName());
-        }
-
         for (String key : schema.attributes()) {
             try {
                 RecordComponent component = findComponent(recordClass, key);

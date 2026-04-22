@@ -17,8 +17,6 @@ public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
     private final EventBusEmitter emitter;
     private final PartitionWindowPolicy windowPolicy;
     private final MountCursor cursor;
-
-    // 1. Añadimos el extractor para mantener consistencia con el Atomic
     private final PartitionKeyExtractor<O> keyExtractor;
 
     public IncrementalMountHandler(IncrementalDataMartReader<I, O> reader,
@@ -41,13 +39,8 @@ public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
     public void handle(MountTarget target) throws SpoolException {
         List<PartitionKey> closedPending = getClosedPendingPartitions(target);
         if (closedPending.isEmpty()) return;
-
-        // 2. Separamos el procesamiento de la escritura y el commit del cursor
         O aggregatedResult = processPartitions(closedPending, getCurrent(target));
-
         writeResult(target, aggregatedResult);
-
-        // 3. ¡CRÍTICO! Avanzamos el cursor SOLO después de escribir con éxito
         commitCursor(target, closedPending);
 
         emitEvent(target);

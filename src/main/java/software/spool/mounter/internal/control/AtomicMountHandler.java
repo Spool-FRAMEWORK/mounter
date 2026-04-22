@@ -35,17 +35,13 @@ public class AtomicMountHandler<I, O> implements Handler<MountTarget> {
     @Override
     public void handle(MountTarget target) throws SpoolException {
         if (shouldSkip(target)) return;
-        writeResult(target, aggregate(target));
+        writeResult(target, aggregator.aggregate(reader.read(target.sourceKey()).stream()));
         emitEvent(target);
         markAsMounted(target);
     }
 
     private boolean shouldSkip(MountTarget target) {
         return !windowPolicy.isClosed(target.sourceKey()) || checkpoint.isMounted(target);
-    }
-
-    private Stream<O> aggregate(MountTarget target) {
-        return aggregator.aggregate(reader.read(target.sourceKey()).stream());
     }
 
     private void writeResult(MountTarget target, Stream<O> aggregated) {
