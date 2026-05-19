@@ -1,9 +1,8 @@
 package software.spool.mounter.internal.control;
 
 import software.spool.core.exception.SpoolException;
-import software.spool.core.model.event.ItemsMounted;
 import software.spool.core.model.vo.PartitionKey;
-import software.spool.core.port.bus.EventBusEmitter;
+import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.bus.Handler;
 import software.spool.mounter.api.port.*;
 
@@ -14,7 +13,7 @@ public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
     private final IncrementalDataMartReader<I, O> reader;
     private final MergeableMountAggregator<I, O> aggregator;
     private final DataMartWriter<O> writer;
-    private final EventBusEmitter emitter;
+    private final EventPublisher publisher;
     private final PartitionWindowPolicy windowPolicy;
     private final MountCursor cursor;
     private final PartitionKeyExtractor<O> keyExtractor;
@@ -22,14 +21,14 @@ public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
     public IncrementalMountHandler(IncrementalDataMartReader<I, O> reader,
                                    MergeableMountAggregator<I, O> aggregator,
                                    DataMartWriter<O> writer,
-                                   EventBusEmitter emitter,
+                                   EventPublisher publisher,
                                    PartitionWindowPolicy windowPolicy,
                                    MountCursor cursor,
                                    PartitionKeyExtractor<O> keyExtractor) {
         this.reader = reader;
         this.aggregator = aggregator;
         this.writer = writer;
-        this.emitter = emitter;
+        this.publisher = publisher;
         this.windowPolicy = windowPolicy;
         this.cursor = cursor;
         this.keyExtractor = keyExtractor;
@@ -42,8 +41,6 @@ public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
         O aggregatedResult = processPartitions(closedPending, getCurrent(target));
         writeResult(target, aggregatedResult);
         commitCursor(target, closedPending);
-
-        emitEvent(target);
     }
 
     private O getCurrent(MountTarget target) {
@@ -81,11 +78,5 @@ public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
         for (PartitionKey sourceKey : partitions) {
             cursor.advance(target, sourceKey);
         }
-    }
-
-    private void emitEvent(MountTarget target) {
-        emitter.emit(ItemsMounted.builder()
-                .partitionKey(target.sourceKey())
-                .build());
     }
 }

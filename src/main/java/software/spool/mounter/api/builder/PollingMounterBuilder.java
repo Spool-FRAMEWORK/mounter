@@ -1,8 +1,8 @@
 package software.spool.mounter.api.builder;
 
-import software.spool.core.port.bus.EventBusEmitter;
+import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.bus.Handler;
-import software.spool.core.port.decorator.SafeEventBusEmitter;
+import software.spool.core.port.decorator.SafeEventPublisher;
 import software.spool.core.port.watchdog.ModuleHeartBeat;
 import software.spool.core.utils.polling.PollingPolicy;
 import software.spool.core.utils.polling.PollingScheduler;
@@ -38,7 +38,7 @@ public class PollingMounterBuilder<T> {
         private final MountAggregator<T, R> aggregator;
         private DataMartWriter<R> writer;
         private PollingPolicy policy;
-        private EventBusEmitter emitter;
+        private EventPublisher publisher;
         private ErrorRouter errorRouter;
         private MountTarget target;
         private PollingScheduler scheduler;
@@ -64,8 +64,8 @@ public class PollingMounterBuilder<T> {
             return this;
         }
 
-        public Configured<T, R> emittingWith(EventBusEmitter emitter) {
-            this.emitter = SafeEventBusEmitter.of(emitter);
+        public Configured<T, R> emittingWith(EventPublisher publisher) {
+            this.publisher = SafeEventPublisher.of(publisher);
             return this;
         }
 
@@ -107,7 +107,7 @@ public class PollingMounterBuilder<T> {
         public Mounter build() {
             ErrorRouter router = getErrorRouter();
             Handler<MountTarget> handler = new AtomicMountHandler<>(
-                    reader, aggregator, writer, emitter, partitionWindowPolicy, checkpoint,
+                    reader, aggregator, writer, publisher, partitionWindowPolicy, checkpoint,
                     new RecordPartitionKeyExtractor<>(mountPartitionSchema)
             );
             MountStrategy strategy = new PollingMountStrategy(target, handler, router, scheduler, policy);
@@ -115,7 +115,7 @@ public class PollingMounterBuilder<T> {
         }
 
         private ErrorRouter getErrorRouter() {
-            return Objects.requireNonNullElse(errorRouter, MounterErrorRouter.defaults(emitter));
+            return Objects.requireNonNullElse(errorRouter, MounterErrorRouter.defaults(publisher));
         }
     }
 }
