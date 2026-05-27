@@ -20,22 +20,22 @@ import software.spool.mounter.internal.utils.RecordPartitionKeyExtractor;
 import java.util.Objects;
 
 public class PollingMounterBuilder<T> {
-    private final PartitionedReader<T> reader;
+    private final PartitionedReader reader;
     private final ModuleHeartBeat moduleHeartBeat;
 
-    public PollingMounterBuilder(PartitionedReader<T> reader, ModuleHeartBeat moduleHeartBeat) {
+    public PollingMounterBuilder(PartitionedReader reader, ModuleHeartBeat moduleHeartBeat) {
         this.reader = reader;
         this.moduleHeartBeat = moduleHeartBeat;
     }
 
-    public <R> Configured<T, R> aggregatingWith(MountAggregator<T, R> aggregator) {
+    public <R> Configured<T, R> aggregatingWith(MountAggregator<R> aggregator) {
         return new Configured<>(reader, moduleHeartBeat, aggregator);
     }
 
     public static class Configured<T, R> {
-        private final PartitionedReader<T> reader;
+        private final PartitionedReader reader;
         private final ModuleHeartBeat moduleHeartBeat;
-        private final MountAggregator<T, R> aggregator;
+        private final MountAggregator<R> aggregator;
         private DataMartWriter<R> writer;
         private PollingPolicy policy;
         private EventPublisher publisher;
@@ -45,9 +45,9 @@ public class PollingMounterBuilder<T> {
         private PartitionWindowPolicy partitionWindowPolicy;
         private MountCheckpoint checkpoint;
         private MountCursor cursor;
-        private MountPartitionSchema<R> mountPartitionSchema;
+        private PartitionKeyExtractor<R> keyExtractor;
 
-        private Configured(PartitionedReader<T> reader, ModuleHeartBeat moduleHeartBeat, MountAggregator<T, R> aggregator) {
+        private Configured(PartitionedReader reader, ModuleHeartBeat moduleHeartBeat, MountAggregator<R> aggregator) {
             this.reader = reader;
             this.moduleHeartBeat = moduleHeartBeat;
             this.aggregator = aggregator;
@@ -99,8 +99,13 @@ public class PollingMounterBuilder<T> {
             return this;
         }
 
-        public Configured<T, R> partitioningWith(MountPartitionSchema<R> mountPartitionSchema) {
-            this.mountPartitionSchema = mountPartitionSchema;
+        public Configured<T, R> partitioningWith(MountPartitionSchema<R> schema) {
+            this.keyExtractor = new RecordPartitionKeyExtractor<>(schema);
+            return this;
+        }
+
+        public Configured<T, R> partitioningWith(PartitionKeyExtractor<R> keyExtractor) {
+            this.keyExtractor = keyExtractor;
             return this;
         }
 
@@ -108,7 +113,7 @@ public class PollingMounterBuilder<T> {
             ErrorRouter router = getErrorRouter();
             Handler<MountTarget> handler = new AtomicMountHandler<>(
                     reader, aggregator, writer, publisher, partitionWindowPolicy, checkpoint,
-                    new RecordPartitionKeyExtractor<>(mountPartitionSchema)
+                    keyExtractor
             );
             MountStrategy strategy = new PollingMountStrategy(target, handler, router, scheduler, policy);
             return new Mounter(strategy, router, moduleHeartBeat);

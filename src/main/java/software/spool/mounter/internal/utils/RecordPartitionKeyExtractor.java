@@ -1,7 +1,9 @@
 package software.spool.mounter.internal.utils;
 
 import software.spool.core.model.vo.PartitionKey;
+import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.MountPartitionSchema;
+import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionKeyExtractor;
 
 import java.lang.reflect.RecordComponent;
@@ -43,11 +45,11 @@ public class RecordPartitionKeyExtractor<O> implements PartitionKeyExtractor<O> 
     }
 
     @Override
-    public PartitionKey extract(O payload) {
+    public PartitionKey extract(GenericRecord input, O output, MountTarget target) {
         StringBuilder path = new StringBuilder();
         for (Map.Entry<String, Function<O, Object>> entry : accessors.entrySet()) {
             if (!path.isEmpty()) path.append("/");
-            path.append(entry.getKey()).append("=").append(entry.getValue().apply(payload));
+            path.append(entry.getKey()).append("=").append(entry.getValue().apply(output)); // <- output, no input
         }
         return new PartitionKey(path.toString());
     }

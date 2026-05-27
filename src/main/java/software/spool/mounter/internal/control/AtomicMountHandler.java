@@ -3,21 +3,24 @@ package software.spool.mounter.internal.control;
 import software.spool.core.exception.SpoolException;
 import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.bus.Handler;
+import software.spool.mounter.api.model.AggregatedRecord;
+import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.*;
 
+import java.util.List;
 import java.util.stream.Stream;
 
-public class AtomicMountHandler<I, O> implements Handler<MountTarget> {
-    private final PartitionedReader<I> reader;
-    private final MountAggregator<I, O> aggregator;
+public class AtomicMountHandler<O> implements Handler<MountTarget> {
+    private final PartitionedReader reader;
+    private final MountAggregator<O> aggregator;
     private final DataMartWriter<O> writer;
     private final EventPublisher publisher;
     private final PartitionWindowPolicy windowPolicy;
     private final MountCheckpoint checkpoint;
     private final PartitionKeyExtractor<O> keyExtractor;
 
-    public AtomicMountHandler(PartitionedReader<I> reader,
-                              MountAggregator<I, O> aggregator,
+    public AtomicMountHandler(PartitionedReader reader,
+                              MountAggregator<O> aggregator,
                               DataMartWriter<O> writer,
                               EventPublisher publisher,
                               PartitionWindowPolicy windowPolicy,
@@ -34,7 +37,8 @@ public class AtomicMountHandler<I, O> implements Handler<MountTarget> {
     @Override
     public void handle(MountTarget target) throws SpoolException {
         if (shouldSkip(target)) return;
-        writeResult(target, aggregator.aggregate(reader.read(target.sourceKey()).stream()));
+        List<PartitionedRecord<GenericRecord>> records = reader.read(target);
+        writeResult(target, aggregator.aggregate(records.stream()));
         markAsMounted(target);
     }
 
@@ -42,9 +46,12 @@ public class AtomicMountHandler<I, O> implements Handler<MountTarget> {
         return !windowPolicy.isClosed(target.sourceKey()) || checkpoint.isMounted(target);
     }
 
-    private void writeResult(MountTarget target, Stream<O> aggregated) {
-        Stream<PartitionedRecord<O>> partitionedStream = aggregated.map(payload ->
-                new PartitionedRecord<>(keyExtractor.extract(payload), payload)
+    private void writeResult(MountTarget target, Stream<AggregatedRecord<O>> aggregated) {
+        Stream<PartitionedRecord<O>> partitionedStream = aggregated.map(agg ->
+                new PartitionedRecord<>(
+                        keyExtractor.extract(agg.source(), agg.output(), target),
+                        agg.output()
+                )
         );
         writer.write(target, partitionedStream);
     }

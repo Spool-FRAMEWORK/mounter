@@ -10,16 +10,16 @@ import java.util.List;
 import java.util.stream.Stream;
 
 public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
-    private final IncrementalDataMartReader<I, O> reader;
-    private final MergeableMountAggregator<I, O> aggregator;
+    private final IncrementalDataMartReader<O> reader;
+    private final MergeableMountAggregator<O> aggregator;
     private final DataMartWriter<O> writer;
     private final EventPublisher publisher;
     private final PartitionWindowPolicy windowPolicy;
     private final MountCursor cursor;
     private final PartitionKeyExtractor<O> keyExtractor;
 
-    public IncrementalMountHandler(IncrementalDataMartReader<I, O> reader,
-                                   MergeableMountAggregator<I, O> aggregator,
+    public IncrementalMountHandler(IncrementalDataMartReader<O> reader,
+                                   MergeableMountAggregator<O> aggregator,
                                    DataMartWriter<O> writer,
                                    EventPublisher publisher,
                                    PartitionWindowPolicy windowPolicy,
@@ -38,7 +38,7 @@ public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
     public void handle(MountTarget target) throws SpoolException {
         List<PartitionKey> closedPending = getClosedPendingPartitions(target);
         if (closedPending.isEmpty()) return;
-        O aggregatedResult = processPartitions(closedPending, getCurrent(target));
+        O aggregatedResult = processPartitions(closedPending, getCurrent(target), target);
         writeResult(target, aggregatedResult);
         commitCursor(target, closedPending);
     }
@@ -54,24 +54,22 @@ public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
                 .toList();
     }
 
-    private O processPartitions(List<PartitionKey> partitions, O current) {
+    private O processPartitions(List<PartitionKey> partitions, O current, MountTarget mountTarget) {
         for (PartitionKey sourceKey : partitions) {
-            current = mergePartition(current, sourceKey);
+            current = mergePartition(current, mountTarget);
         }
         return current;
     }
 
-    private O mergePartition(O current, PartitionKey sourceKey) {
-        return aggregator.merge(current, reader.read(sourceKey).stream())
+    private O mergePartition(O current, MountTarget mountTarget) {
+        return aggregator.merge(current, reader.read(mountTarget).stream())
                 .findFirst()
                 .orElse(current);
     }
 
     private void writeResult(MountTarget target, O current) {
         if (current == null) return;
-
-        PartitionKey destKey = keyExtractor.extract(current);
-        writer.write(target, Stream.of(new PartitionedRecord<>(destKey, current)));
+        writer.write(target, Stream.of(new PartitionedRecord<>(target.sourceKey(), current)));
     }
 
     private void commitCursor(MountTarget target, List<PartitionKey> partitions) {

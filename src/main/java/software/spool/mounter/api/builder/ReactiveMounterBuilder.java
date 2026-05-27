@@ -20,8 +20,8 @@ public class ReactiveMounterBuilder<I, O> {
     private final EventBus bus;
     private final ModuleHeartBeat moduleHeartBeat;
     private MountTarget target;
-    private PartitionedReader<I> reader;
-    private MountAggregator<I, O> aggregator;
+    private PartitionedReader reader;
+    private MountAggregator<O> aggregator;
     private DataMartWriter<O> writer;
     private ErrorRouter errorRouter;
     private PartitionWindowPolicy partitionWindowPolicy;
@@ -34,7 +34,7 @@ public class ReactiveMounterBuilder<I, O> {
         this.moduleHeartBeat = moduleHeartBeat;
     }
 
-    public ReactiveMounterBuilder<I, O> aggregatingWith(MountAggregator<I, O> aggregator) {
+    public ReactiveMounterBuilder<I, O> aggregatingWith(MountAggregator<O> aggregator) {
         this.aggregator = aggregator;
         return this;
     }
@@ -44,7 +44,7 @@ public class ReactiveMounterBuilder<I, O> {
         return this;
     }
 
-    public ReactiveMounterBuilder<I, O> readingWith(PartitionedReader<I> reader) {
+    public ReactiveMounterBuilder<I, O> readingWith(PartitionedReader reader) {
         this.reader = SafePartitionedReader.of(reader);
         return this;
     }
