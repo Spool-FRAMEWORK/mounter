@@ -7,6 +7,7 @@ import software.spool.mounter.api.port.scaling.PartitionDispatcher;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 public class ThreadPoolPartitionDispatcher implements PartitionDispatcher {
@@ -21,7 +22,14 @@ public class ThreadPoolPartitionDispatcher implements PartitionDispatcher {
         List<CompletableFuture<Void>> futures = units.stream()
                 .map(unit -> CompletableFuture.runAsync(() -> invoke(worker, unit), executor))
                 .toList();
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof SpoolException se) throw se;
+            if (cause instanceof RuntimeException re) throw re;
+            throw e;
+        }
     }
 
     private void invoke(Handler<MountTarget> worker, MountTarget target) {
