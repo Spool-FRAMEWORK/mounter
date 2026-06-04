@@ -26,7 +26,7 @@ public class SafePartitionDiscovery implements PartitionDiscovery {
         } catch (SpoolException e) {
             throw e;
         } catch (Exception e) {
-            throw new DataLakeReadException(scope, e.getMessage());
+            throw new DataLakeReadException(scope, e.getMessage(), e);
         }
     }
 }

@@ -26,7 +26,7 @@ public class SafeScalingPolicy implements ScalingPolicy {
         } catch (SpoolException e) {
             throw e;
         } catch (Exception e) {
-            throw new ScalingPolicyException(e.getMessage());
+            throw new ScalingPolicyException(e.getMessage(), e);
         }
     }
 }

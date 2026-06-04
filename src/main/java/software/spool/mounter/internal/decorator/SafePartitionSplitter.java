@@ -27,7 +27,7 @@ public class SafePartitionSplitter implements PartitionSplitter {
         } catch (SpoolException e) {
             throw e;
         } catch (Exception e) {
-            throw new PartitionSplitException(partition.key(), e.getMessage());
+            throw new PartitionSplitException(partition.key(), e.getMessage(), e);
         }
     }
 }

@@ -26,7 +26,7 @@ public class SafeDataMartWriter<O> implements DataMartWriter {
         } catch (SpoolException e) {
             throw e;
         } catch (Exception e) {
-            throw new DataMartWriteException(target.sourceKey(), e.getMessage());
+            throw new DataMartWriteException(target.sourceKey(), e.getMessage(), e);
         }
     }
 }

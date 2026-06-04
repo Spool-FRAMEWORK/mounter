@@ -7,6 +7,7 @@ import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.Mounter;
 import software.spool.mounter.api.adapter.SequentialPartitionDispatcher;
 import software.spool.mounter.api.port.PartitionKeyExtractor;
+import software.spool.mounter.api.port.scaling.PartitionDispatcher;
 import software.spool.mounter.api.port.scaling.PartitionInfo;
 import software.spool.mounter.api.port.scaling.ScalingPlan;
 import software.spool.mounter.api.strategy.MountStrategy;

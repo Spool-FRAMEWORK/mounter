@@ -27,7 +27,7 @@ public class SafePartitionedReader implements PartitionedReader {
         } catch (SpoolException e) {
             throw e;
         } catch (Exception e) {
-            throw new DataLakeReadException(mountTarget.sourceKey(), e.getMessage());
+            throw new DataLakeReadException(mountTarget.sourceKey(), e.getMessage(), e);
         }
     }
 }

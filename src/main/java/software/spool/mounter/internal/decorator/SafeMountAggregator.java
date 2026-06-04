@@ -27,7 +27,7 @@ public class SafeMountAggregator<O> implements MountAggregator<O> {
         } catch (SpoolException e) {
             throw e;
         } catch (Exception e) {
-            throw new MountAggregateException(e.getMessage());
+            throw new MountAggregateException(e.getMessage(), e);
         }
     }
 }

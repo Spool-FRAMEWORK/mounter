@@ -26,7 +26,7 @@ public class SafePartitionDispatcher implements PartitionDispatcher {
         } catch (SpoolException e) {
             throw e;
         } catch (Exception e) {
-            throw new PartitionDispatchException(e.getMessage());
+            throw new PartitionDispatchException(e.getMessage(), e);
         }
     }
 }

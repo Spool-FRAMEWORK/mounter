@@ -6,7 +6,7 @@ import software.spool.core.port.bus.Handler;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.internal.control.steps.MountContextKeys;
 
-public class AtomicMountHandler<O> implements Handler<MountTarget> {
+public class AtomicMountHandler implements Handler<MountTarget> {
     private final Pipeline<PipelineContext, PipelineContext> pipeline;
 
     public AtomicMountHandler(Pipeline<PipelineContext, PipelineContext> pipeline) {
