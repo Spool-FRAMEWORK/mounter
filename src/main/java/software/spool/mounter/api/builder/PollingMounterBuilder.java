@@ -1,5 +1,6 @@
 package software.spool.mounter.api.builder;
 
+import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.bus.Handler;
 import software.spool.core.port.decorator.SafeEventPublisher;
@@ -46,6 +47,12 @@ public class PollingMounterBuilder<T> {
         private MountCheckpoint checkpoint;
         private MountCursor cursor;
         private PartitionKeyExtractor<R> keyExtractor;
+        private PartitionKey scope;
+        private PartitionDiscovery discovery;
+        private PartitionSplitter splitter;
+        private ScalingPolicy scalingPolicy;
+        private PartitionDispatcher localDispatcher;
+        private PartitionDispatcher distributedDispatcher;
 
         private Configured(PartitionedReader reader, ModuleHeartBeat moduleHeartBeat, MountAggregator<R> aggregator) {
             this.reader = reader;
@@ -79,6 +86,11 @@ public class PollingMounterBuilder<T> {
             return this;
         }
 
+        public Configured<T, R> onScope(PartitionKey scope) {
+            this.scope = scope;
+            return this;
+        }
+
         public Configured<T, R> partitionWindowPolicy(PartitionWindowPolicy partitionWindowPolicy) {
             this.partitionWindowPolicy = partitionWindowPolicy;
             return this;
@@ -109,13 +121,40 @@ public class PollingMounterBuilder<T> {
             return this;
         }
 
+        public Configured<T, R> discoveringWith(PartitionDiscovery discovery) {
+            this.discovery = discovery;
+            return this;
+        }
+
+        public Configured<T, R> splittingWith(PartitionSplitter splitter) {
+            this.splitter = splitter;
+            return this;
+        }
+
+        public Configured<T, R> scalingWith(ScalingPolicy scalingPolicy) {
+            this.scalingPolicy = scalingPolicy;
+            return this;
+        }
+
+        public Configured<T, R> dispatchingWith(PartitionDispatcher localDispatcher) {
+            this.localDispatcher = localDispatcher;
+            return this;
+        }
+
+        public Configured<T, R> dispatchingWith(PartitionDispatcher localDispatcher, PartitionDispatcher distributedDispatcher) {
+            this.localDispatcher = localDispatcher;
+            this.distributedDispatcher = distributedDispatcher;
+            return this;
+        }
+
         public Mounter build() {
             ErrorRouter router = getErrorRouter();
+            MountTarget effectiveTarget = scope != null ? target.withSourceKey(scope) : target;
             Handler<MountTarget> handler = new AtomicMountHandler<>(
-                    reader, aggregator, writer, publisher, partitionWindowPolicy, checkpoint,
-                    keyExtractor
+                    reader, aggregator, writer, publisher, partitionWindowPolicy, checkpoint, keyExtractor,
+                    discovery, splitter, scalingPolicy, localDispatcher, distributedDispatcher
             );
-            MountStrategy strategy = new PollingMountStrategy(target, handler, router, scheduler, policy);
+            MountStrategy strategy = new PollingMountStrategy(effectiveTarget, handler, router, scheduler, policy);
             return new Mounter(strategy, router, moduleHeartBeat);
         }
 
