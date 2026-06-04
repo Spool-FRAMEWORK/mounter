@@ -4,6 +4,10 @@ import software.spool.core.model.vo.PartitionKey;
 import software.spool.mounter.api.MountMode;
 
 public record MountTarget(String dataMart, PartitionKey sourceKey, MountMode mode, ExtensionResolver extensionResolver) {
+    public MountTarget withSourceKey(PartitionKey key) {
+        return new MountTarget(dataMart, key, mode, extensionResolver);
+    }
+
     public String qualifiedDataMart() {
         return mode.qualify(dataMart);
     }

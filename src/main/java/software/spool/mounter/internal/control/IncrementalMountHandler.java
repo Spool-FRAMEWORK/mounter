@@ -56,7 +56,7 @@ public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
 
     private O processPartitions(List<PartitionKey> partitions, O current, MountTarget mountTarget) {
         for (PartitionKey sourceKey : partitions) {
-            current = mergePartition(current, mountTarget);
+            current = mergePartition(current, mountTarget.withSourceKey(sourceKey));
         }
         return current;
     }
