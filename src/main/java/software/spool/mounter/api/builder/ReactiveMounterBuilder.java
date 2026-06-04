@@ -22,7 +22,7 @@ public class ReactiveMounterBuilder<I, O> {
     private MountTarget target;
     private PartitionedReader reader;
     private MountAggregator<O> aggregator;
-    private DataMartWriter<O> writer;
+    private DataMartWriter writer;
     private ErrorRouter errorRouter;
     private PartitionWindowPolicy partitionWindowPolicy;
     private MountCheckpoint checkpoint;
@@ -39,7 +39,7 @@ public class ReactiveMounterBuilder<I, O> {
         return this;
     }
 
-    public ReactiveMounterBuilder<I, O> writingWith(DataMartWriter<O> writer) {
+    public ReactiveMounterBuilder<I, O> writingWith(DataMartWriter writer) {
         this.writer = SafeDataMartWriter.of(writer);
         return this;
     }

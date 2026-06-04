@@ -1,5 +1,7 @@
 package software.spool.mounter.api.model;
 
+import software.spool.core.adapter.jackson.RecordSerializerFactory;
+
 import java.util.*;
 
 public final class GenericRecord {
@@ -14,49 +16,72 @@ public final class GenericRecord {
         return new GenericRecord(new LinkedHashMap<>(fields));
     }
 
-    public Optional<Object> get(String field) {
-        return Optional.ofNullable(fields.get(field));
-    }
-
     public boolean has(String field) {
         return fields.containsKey(field);
+    }
+
+    public Map<String, Object> content() {
+        return Map.copyOf(fields);
     }
 
     public Set<String> fields() {
         return fields.keySet();
     }
 
-    public Optional<String> getString(String field) {
-        return get(field).map(Object::toString);
+    public Object get(String field) {
+        if (!fields.containsKey(field)) {
+            throw new NoSuchElementException("Field '" + field + "' not found");
+        }
+        return fields.get(field);
     }
 
-    public Optional<Long> getLong(String field) {
-        return get(field).map(v -> ((Number) v).longValue());
+    public String getString(String field) {
+        Object value = get(field);
+        return value != null ? value.toString() : null;
     }
 
-    public Optional<Double> getDouble(String field) {
-        return get(field).map(v -> ((Number) v).doubleValue());
+    public Long getLong(String field) {
+        Object value = get(field);
+        if (!(value instanceof Number number)) {
+            throw new ClassCastException("Field '" + field + "' is not a Number");
+        }
+        return number.longValue();
     }
 
-    public Optional<Boolean> getBoolean(String field) {
-        return get(field).map(v -> (Boolean) v);
+    public Double getDouble(String field) {
+        Object value = get(field);
+        if (!(value instanceof Number number)) {
+            throw new ClassCastException("Field '" + field + "' is not a Number");
+        }
+        return number.doubleValue();
+    }
+
+    public Boolean getBoolean(String field) {
+        Object value = get(field);
+        if (!(value instanceof Boolean b)) {
+            throw new ClassCastException("Field '" + field + "' is not a Boolean");
+        }
+        return b;
     }
 
     @SuppressWarnings("unchecked")
-    public Optional<GenericRecord> getNested(String field) {
-        return get(field)
-            .filter(v -> v instanceof Map)
-            .map(v -> GenericRecord.of((Map<String, Object>) v));
+    public GenericRecord getNested(String field) {
+        Object value = get(field);
+        if (!(value instanceof Map<?, ?> map)) {
+            throw new ClassCastException("Field '" + field + "' is not a Map");
+        }
+        return GenericRecord.of((Map<String, Object>) map);
     }
 
     @SuppressWarnings("unchecked")
     public List<GenericRecord> getList(String field) {
-        return get(field)
-            .filter(v -> v instanceof List)
-            .map(v -> ((List<Map<String, Object>>) v).stream()
+        Object value = get(field);
+        if (!(value instanceof List<?> list)) {
+            throw new ClassCastException("Field '" + field + "' is not a List");
+        }
+        return ((List<Map<String, Object>>) list).stream()
                 .map(GenericRecord::of)
-                .toList())
-            .orElse(List.of());
+                .toList();
     }
 
     public Map<String, Object> toMap() {
@@ -65,7 +90,7 @@ public final class GenericRecord {
 
     @Override
     public String toString() {
-        return "SpoolRecord" + fields;
+        return new String(RecordSerializerFactory.record().serialize(fields))   ;
     }
 
     @Override

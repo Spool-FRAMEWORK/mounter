@@ -36,7 +36,7 @@ public class PollingMounterBuilder<T> {
         private final PartitionedReader reader;
         private final ModuleHeartBeat moduleHeartBeat;
         private final MountAggregator<R> aggregator;
-        private DataMartWriter<R> writer;
+        private DataMartWriter writer;
         private PollingPolicy policy;
         private EventPublisher publisher;
         private ErrorRouter errorRouter;
@@ -54,7 +54,7 @@ public class PollingMounterBuilder<T> {
             this.scheduler = new ThreadedPollingScheduler();
         }
 
-        public Configured<T, R> writingWith(DataMartWriter<R> writer) {
+        public Configured<T, R> writingWith(DataMartWriter writer) {
             this.writer = SafeDataMartWriter.of(writer);
             return this;
         }

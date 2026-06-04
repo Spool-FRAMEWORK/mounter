@@ -12,7 +12,7 @@ import java.util.stream.Stream;
 public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
     private final IncrementalDataMartReader<O> reader;
     private final MergeableMountAggregator<O> aggregator;
-    private final DataMartWriter<O> writer;
+    private final DataMartWriter writer;
     private final EventPublisher publisher;
     private final PartitionWindowPolicy windowPolicy;
     private final MountCursor cursor;
@@ -20,7 +20,7 @@ public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
 
     public IncrementalMountHandler(IncrementalDataMartReader<O> reader,
                                    MergeableMountAggregator<O> aggregator,
-                                   DataMartWriter<O> writer,
+                                   DataMartWriter writer,
                                    EventPublisher publisher,
                                    PartitionWindowPolicy windowPolicy,
                                    MountCursor cursor,

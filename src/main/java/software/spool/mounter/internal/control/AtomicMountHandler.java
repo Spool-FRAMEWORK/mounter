@@ -7,13 +7,12 @@ import software.spool.mounter.api.model.AggregatedRecord;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.*;
 
-import java.util.List;
 import java.util.stream.Stream;
 
 public class AtomicMountHandler<O> implements Handler<MountTarget> {
     private final PartitionedReader reader;
     private final MountAggregator<O> aggregator;
-    private final DataMartWriter<O> writer;
+    private final DataMartWriter writer;
     private final EventPublisher publisher;
     private final PartitionWindowPolicy windowPolicy;
     private final MountCheckpoint checkpoint;
@@ -21,7 +20,7 @@ public class AtomicMountHandler<O> implements Handler<MountTarget> {
 
     public AtomicMountHandler(PartitionedReader reader,
                               MountAggregator<O> aggregator,
-                              DataMartWriter<O> writer,
+                              DataMartWriter writer,
                               EventPublisher publisher,
                               PartitionWindowPolicy windowPolicy,
                               MountCheckpoint checkpoint, PartitionKeyExtractor<O> keyExtractor) {
@@ -37,9 +36,15 @@ public class AtomicMountHandler<O> implements Handler<MountTarget> {
     @Override
     public void handle(MountTarget target) throws SpoolException {
         if (shouldSkip(target)) return;
-        List<PartitionedRecord<GenericRecord>> records = reader.read(target);
-        writeResult(target, aggregator.aggregate(records.stream()));
+        writeResult(target, aggregator.aggregate(resolveStream(target)));
         markAsMounted(target);
+    }
+
+    private Stream<PartitionedRecord<GenericRecord>> resolveStream(MountTarget target) {
+        if (reader instanceof StreamingPartitionedReader sr) {
+            return sr.stream(target);
+        }
+        return reader.read(target).stream();
     }
 
     private boolean shouldSkip(MountTarget target) {
@@ -47,7 +52,7 @@ public class AtomicMountHandler<O> implements Handler<MountTarget> {
     }
 
     private void writeResult(MountTarget target, Stream<AggregatedRecord<O>> aggregated) {
-        Stream<PartitionedRecord<O>> partitionedStream = aggregated.map(agg ->
+        Stream<PartitionedRecord<?>> partitionedStream = aggregated.map(agg ->
                 new PartitionedRecord<>(
                         keyExtractor.extract(agg.source(), agg.output(), target),
                         agg.output()
