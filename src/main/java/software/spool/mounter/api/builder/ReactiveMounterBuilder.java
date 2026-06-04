@@ -1,46 +1,31 @@
 package software.spool.mounter.api.builder;
 
 import software.spool.core.port.bus.EventBus;
-import software.spool.core.port.bus.Handler;
 import software.spool.core.port.watchdog.ModuleHeartBeat;
-import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.Mounter;
-import software.spool.mounter.api.port.*;
-import software.spool.mounter.api.strategy.MountStrategy;
-import software.spool.mounter.api.utils.MounterErrorRouter;
-import software.spool.mounter.internal.control.AtomicMountHandler;
-import software.spool.mounter.internal.decorator.SafeDataMartWriter;
+import software.spool.mounter.api.port.MountAggregator;
+import software.spool.mounter.api.port.PartitionedReader;
 import software.spool.mounter.internal.decorator.SafePartitionedReader;
-import software.spool.mounter.internal.strategy.ReactiveMountStrategy;
-import software.spool.mounter.internal.utils.RecordPartitionKeyExtractor;
-
-import java.util.Objects;
 
 public class ReactiveMounterBuilder<I, O> {
-    private final EventBus bus;
-    private final ModuleHeartBeat moduleHeartBeat;
-    private MountTarget target;
-    private PartitionedReader reader;
-    private MountAggregator<O> aggregator;
-    private DataMartWriter writer;
-    private ErrorRouter errorRouter;
-    private PartitionWindowPolicy partitionWindowPolicy;
-    private MountCheckpoint checkpoint;
-    private MountPartitionSchema<O> mountPartitionSchema;
-
+    final EventBus bus;
+    final ModuleHeartBeat moduleHeartBeat;
+    MountAggregator<O> aggregator;
+    PartitionedReader reader;
+    final MountFacet<ReactiveMounterBuilder<I, O>> mount;
+    final CheckpointFacet<ReactiveMounterBuilder<I, O>> checkpoint;
+    final ObservabilityFacet<ReactiveMounterBuilder<I, O>> observability;
 
     public ReactiveMounterBuilder(EventBus bus, ModuleHeartBeat moduleHeartBeat) {
         this.bus = bus;
         this.moduleHeartBeat = moduleHeartBeat;
+        this.mount = new MountFacet<>(this);
+        this.checkpoint = new CheckpointFacet<>(this);
+        this.observability = new ObservabilityFacet<>(this);
     }
 
     public ReactiveMounterBuilder<I, O> aggregatingWith(MountAggregator<O> aggregator) {
         this.aggregator = aggregator;
-        return this;
-    }
-
-    public ReactiveMounterBuilder<I, O> writingWith(DataMartWriter writer) {
-        this.writer = SafeDataMartWriter.of(writer);
         return this;
     }
 
@@ -49,42 +34,11 @@ public class ReactiveMounterBuilder<I, O> {
         return this;
     }
 
-    public ReactiveMounterBuilder<I, O> errorRouting(ErrorRouter errorRouter) {
-        this.errorRouter = errorRouter;
-        return this;
-    }
-
-    public ReactiveMounterBuilder<I, O> onTarget(MountTarget target) {
-        this.target = target;
-        return this;
-    }
-
-    public ReactiveMounterBuilder<I, O> partitionWindowPolicy(PartitionWindowPolicy partitionWindowPolicy) {
-        this.partitionWindowPolicy = partitionWindowPolicy;
-        return this;
-    }
-
-    public ReactiveMounterBuilder<I, O> checkpoint(MountCheckpoint checkpoint) {
-        this.checkpoint = checkpoint;
-        return this;
-    }
-
-    public ReactiveMounterBuilder<I, O> partitioningWith(MountPartitionSchema<O> mountPartitionSchema) {
-        this.mountPartitionSchema = mountPartitionSchema;
-        return this;
-    }
+    public MountFacet<ReactiveMounterBuilder<I, O>> mount() { return mount; }
+    public CheckpointFacet<ReactiveMounterBuilder<I, O>> checkpoint() { return checkpoint; }
+    public ObservabilityFacet<ReactiveMounterBuilder<I, O>> observability() { return observability; }
 
     public Mounter build() {
-        Handler<MountTarget> handler = new AtomicMountHandler<>(
-                reader, aggregator, writer, bus, partitionWindowPolicy, checkpoint, new RecordPartitionKeyExtractor<>(mountPartitionSchema)
-        );
-
-        MountStrategy strategy = new ReactiveMountStrategy(target, bus, handler, getErrorRouter());
-        return new Mounter(strategy, getErrorRouter(), moduleHeartBeat);
-    }
-
-    private ErrorRouter getErrorRouter() {
-        return Objects.requireNonNullElse(errorRouter, MounterErrorRouter.defaults(bus));
+        return ReactiveMounterAssembler.assemble(this);
     }
 }
-
