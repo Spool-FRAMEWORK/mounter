@@ -62,7 +62,7 @@ public class IncrementalMountHandler<I, O> implements Handler<MountTarget> {
     }
 
     private O mergePartition(O current, MountTarget mountTarget) {
-        return aggregator.merge(current, reader.read(mountTarget).stream())
+        return aggregator.merge(current, reader.read(mountTarget))
                 .findFirst()
                 .orElse(current);
     }

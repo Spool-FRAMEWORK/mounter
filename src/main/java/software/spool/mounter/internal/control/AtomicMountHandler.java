@@ -36,15 +36,8 @@ public class AtomicMountHandler<O> implements Handler<MountTarget> {
     @Override
     public void handle(MountTarget target) throws SpoolException {
         if (shouldSkip(target)) return;
-        writeResult(target, aggregator.aggregate(resolveStream(target)));
+        writeResult(target, aggregator.aggregate(reader.read(target)));
         markAsMounted(target);
-    }
-
-    private Stream<PartitionedRecord<GenericRecord>> resolveStream(MountTarget target) {
-        if (reader instanceof StreamingPartitionedReader sr) {
-            return sr.stream(target);
-        }
-        return reader.read(target).stream();
     }
 
     private boolean shouldSkip(MountTarget target) {
