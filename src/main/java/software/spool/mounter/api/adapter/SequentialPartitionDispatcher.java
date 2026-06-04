@@ -3,7 +3,7 @@ package software.spool.mounter.api.adapter;
 import software.spool.core.exception.SpoolException;
 import software.spool.core.port.bus.Handler;
 import software.spool.mounter.api.port.MountTarget;
-import software.spool.mounter.api.port.PartitionDispatcher;
+import software.spool.mounter.api.port.scaling.PartitionDispatcher;
 
 import java.util.List;
 

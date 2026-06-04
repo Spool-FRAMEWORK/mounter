@@ -7,6 +7,7 @@ import software.spool.mounter.api.adapter.SequentialPartitionDispatcher;
 import software.spool.mounter.api.model.AggregatedRecord;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.*;
+import software.spool.mounter.api.port.scaling.*;
 
 import java.util.ArrayList;
 import java.util.List;

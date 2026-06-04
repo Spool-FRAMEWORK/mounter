@@ -1,8 +1,8 @@
 package software.spool.mounter.api.adapter;
 
-import software.spool.mounter.api.port.PartitionInfo;
-import software.spool.mounter.api.port.ScalingPlan;
-import software.spool.mounter.api.port.ScalingPolicy;
+import software.spool.mounter.api.port.scaling.PartitionInfo;
+import software.spool.mounter.api.port.scaling.ScalingPlan;
+import software.spool.mounter.api.port.scaling.ScalingPolicy;
 
 import java.util.List;
 
