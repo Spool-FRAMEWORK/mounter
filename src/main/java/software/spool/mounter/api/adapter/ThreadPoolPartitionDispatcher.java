@@ -1,7 +1,6 @@
 package software.spool.mounter.api.adapter;
 
 import software.spool.core.exception.SpoolException;
-import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.Handler;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionDispatcher;
@@ -18,9 +17,9 @@ public class ThreadPoolPartitionDispatcher implements PartitionDispatcher {
     }
 
     @Override
-    public void dispatch(List<PartitionKey> partitions, MountTarget scope, Handler<MountTarget> worker) {
-        List<CompletableFuture<Void>> futures = partitions.stream()
-                .map(key -> CompletableFuture.runAsync(() -> invoke(worker, scope.withSourceKey(key)), executor))
+    public void dispatch(List<MountTarget> units, Handler<MountTarget> worker) {
+        List<CompletableFuture<Void>> futures = units.stream()
+                .map(unit -> CompletableFuture.runAsync(() -> invoke(worker, unit), executor))
                 .toList();
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
     }
