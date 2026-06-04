@@ -11,7 +11,8 @@ target/
 *.ipr
 
 repomix-output.xml
-CLAUDE*.md
+*CLAUDE*.md
+*context
 
 ### Eclipse ###
 .apt_generated

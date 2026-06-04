@@ -2,6 +2,7 @@ package software.spool.mounter.api.port;
 
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.mounter.api.MountMode;
+import software.spool.mounter.api.port.scaling.PartitionSlice;
 
 public record MountTarget(String dataMart, PartitionKey sourceKey, MountMode mode, ExtensionResolver extensionResolver, PartitionSlice slice) {
     public MountTarget withSourceKey(PartitionKey key) {
