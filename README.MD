@@ -1,6 +1,48 @@
-# Mounter
+# Spool — Mounter
 
-Part of the [Spool Framework](https://github.com/Spool-FRAMEWORK). Mounter materializes partitioned data from a source store (data lake, event store) into a target store (data mart), handling scheduling, windowing, checkpointing, and optional parallel scaling.
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Java](https://img.shields.io/badge/Java-21%2B-orange.svg)](https://openjdk.org/)
+[![Maven](https://img.shields.io/badge/build-Maven-C71A36.svg)](https://maven.apache.org/)
+
+**Mounter** is the **Spool** framework module responsible for **materializing partitioned data from a source store into a target data mart**. It handles scheduling, windowing, checkpointing, and optional parallel scaling.
+
+---
+
+## Table of Contents
+
+- [What it does](#what-it-does)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Examples](#examples)
+  - [Polling Mounter](#polling-mounter)
+  - [Reactive Mounter](#reactive-mounter)
+  - [Incremental Mounter](#incremental-mounter)
+  - [Scoped Mounter](#scoped-mounter)
+  - [Parallel Scaling](#parallel-scaling)
+- [Key Concepts](#key-concepts)
+- [Built-in Adapters](#built-in-adapters)
+- [License](#license)
+
+---
+
+## What it does
+
+```
+Source Store (data lake / event store)
+      │
+      ▼
+PartitionedReader ──► MountAggregator ──► DataMartWriter
+      │                                        │
+PartitionWindowPolicy                    MountTarget
+(is this partition closed?)             (output location)
+      │
+MountCheckpoint
+(track what's already been mounted)
+```
+
+The Mounter reads closed partitions, applies an aggregation, and writes the result to a data mart. It tracks processed partitions so each is mounted exactly once.
+
+---
 
 ## Installation
 
@@ -8,67 +50,119 @@ Part of the [Spool Framework](https://github.com/Spool-FRAMEWORK). Mounter mater
 <dependency>
     <groupId>io.github.spool-framework</groupId>
     <artifactId>mounter</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```
 
-## Core Concepts
+```xml
+<repositories>
+    <repository>
+        <id>github</id>
+        <url>https://maven.pkg.github.com/Spool-FRAMEWORK/*</url>
+    </repository>
+</repositories>
+```
 
-| Concept | Interface | Role |
-|---|---|---|
-| `PartitionedReader` | Port | Reads raw records from a source partition |
-| `DataMartWriter` | Port | Writes the aggregated result to the target store |
-| `MountAggregator<R>` | Port | Transforms a stream of records into a typed result `R` |
-| `MountTarget` | Value | Identifies the target data mart + source partition being mounted |
-| `PartitionWindowPolicy` | Port | Decides whether a partition is closed and ready to process |
-| `MountCheckpoint` | Port | Tracks which partitions have already been mounted |
-| `MountPartitionSchema<R>` | Port | Maps an aggregated record `R` to its output partition key |
+> Requires **Java 21+**.
 
-### Mount modes
+---
 
-`MountTarget` is created with a **mode** that qualifies how the output is stored:
+## Quick Start
 
 ```java
-// Record-per-partition transformation
-MountTarget target = MountTarget.transformation("orders-by-customer", sourceKey);
+Mounter mounter = MounterBuilderFactory.polling(reader)
+        .aggregatingWith(aggregator)
+        .mount()
+            .writingWith(writer)
+            .onTarget(MountTarget.transformation("orders-by-customer", rootKey))
+            .partitioningWith(schema)
+            .and()
+        .checkpoint()
+            .windowPolicy(new AlwaysClosedWindowPolicy())
+            .checkpoint(checkpoint)
+            .and()
+        .scheduling()
+            .pollingWith(pollingPolicy)
+            .and()
+        .build();
 
-// Aggregated single-file per partition
-MountTarget target = MountTarget.aggregation("orders-summary", sourceKey);
+SpoolNode node = SpoolNode.create()
+        .register(mounter);
 
-// Explicit output file extension
-MountTarget target = MountTarget.transformation("orders-by-customer", sourceKey, "parquet");
+node.start();
 ```
 
 ---
 
-## Polling Mounter
+## Examples
+
+### Polling Mounter
 
 Runs on a fixed schedule. On every tick it discovers all closed partitions and mounts them.
 
 ```java
 Mounter mounter = MounterBuilderFactory.polling(reader)
-    .aggregatingWith(aggregator)
-    .mount()
-        .writingWith(writer)
-        .onTarget(MountTarget.transformation("orders-by-customer", rootKey))
-        .partitioningWith(schema)
-        .and()
-    .checkpoint()
-        .windowPolicy(new AlwaysClosedWindowPolicy())
-        .checkpoint(checkpoint)
-        .and()
-    .scheduling()
-        .pollingWith(pollingPolicy)
-        .emittingWith(eventPublisher)
-        .and()
-    .build();
-
-mounter.start();
-// ...
-mounter.stop();
+        .aggregatingWith(aggregator)
+        .mount()
+            .writingWith(writer)
+            .onTarget(MountTarget.transformation("orders-by-customer", rootKey))
+            .partitioningWith(schema)
+            .and()
+        .checkpoint()
+            .windowPolicy(new AlwaysClosedWindowPolicy())
+            .checkpoint(checkpoint)
+            .and()
+        .scheduling()
+            .pollingWith(pollingPolicy)
+            .emittingWith(eventPublisher)
+            .and()
+        .build();
 ```
 
-### Scoping
+---
+
+### Reactive Mounter
+
+Triggers a mount every time an `EnvelopePersisted` event arrives on the bus.
+
+```java
+Mounter mounter = MounterBuilderFactory.reactive(eventBus)
+        .aggregatingWith(aggregator)
+        .readingWith(reader)
+        .mount()
+            .writingWith(writer)
+            .onTarget(MountTarget.aggregation("orders-summary", rootKey))
+            .partitioningWith(schema)
+            .and()
+        .checkpoint()
+            .windowPolicy(windowPolicy)
+            .checkpoint(checkpoint)
+            .and()
+        .build();
+```
+
+---
+
+### Incremental Mounter
+
+For delta/merge use cases — maintains running state and only processes new partitions.
+
+```java
+Pipeline<PipelineContext, PipelineContext> pipeline = Pipeline.<PipelineContext>start()
+        .add(new FetchPendingPartitionsStep(reader, windowPolicy, cursor))
+        .add(new ReadCurrentStateStep<>(reader))
+        .add(new MergePartitionsStep<>(reader, aggregator))
+        .add(new WriteIncrementalResultStep<>(writer))
+        .add(new AdvanceCursorStep(cursor));
+
+IncrementalMountHandler<Input, Output> handler = new IncrementalMountHandler<>(pipeline);
+```
+
+On each call: fetches new closed partitions → reads current state → merges → writes → advances the cursor.
+
+---
+
+### Scoped Mounter
 
 Restrict the reader to a sub-partition with `.onScope()`:
 
@@ -81,113 +175,37 @@ Restrict the reader to a sub-partition with `.onScope()`:
     .and()
 ```
 
-### Custom key extractor
-
-Use a `PartitionKeyExtractor` instead of a schema when the partition key depends on the mount target:
-
-```java
-.mount()
-    .partitioningWith((source, output, target) -> target.sourceKey())
-    .and()
-```
-
-### Observability
-
-Route errors to a custom handler:
-
-```java
-.observability()
-    .withErrorRouter(error -> log.error("Mount failed", error))
-    .and()
-```
-
 ---
 
-## Reactive Mounter
+### Parallel Scaling
 
-Triggers a mount every time an `EnvelopePersisted` event arrives on the bus. Use it when you want near-real-time materialization without polling.
-
-```java
-Mounter mounter = MounterBuilderFactory.reactive(eventBus)
-    .aggregatingWith(aggregator)
-    .readingWith(reader)
-    .mount()
-        .writingWith(writer)
-        .onTarget(MountTarget.aggregation("orders-summary", rootKey))
-        .partitioningWith(schema)
-        .and()
-    .checkpoint()
-        .windowPolicy(windowPolicy)
-        .checkpoint(checkpoint)
-        .and()
-    .build();
-
-mounter.start();
-```
-
----
-
-## Incremental Mounter
-
-For delta/merge use cases where you maintain a running state and only process new partitions on each run. Build an `IncrementalMountHandler` by composing pipeline steps:
-
-```java
-import software.spool.core.pipeline.Pipeline;
-import software.spool.core.pipeline.PipelineContext;
-import software.spool.mounter.internal.control.IncrementalMountHandler;
-import software.spool.mounter.internal.control.steps.*;
-
-Pipeline<PipelineContext, PipelineContext> pipeline = Pipeline.<PipelineContext>start()
-    .add(new FetchPendingPartitionsStep(reader, windowPolicy, cursor))
-    .add(new ReadCurrentStateStep<>(reader))
-    .add(new MergePartitionsStep<>(reader, aggregator))
-    .add(new WriteIncrementalResultStep<>(writer))
-    .add(new AdvanceCursorStep(cursor));
-
-IncrementalMountHandler<Input, Output> handler = new IncrementalMountHandler<>(pipeline);
-```
-
-The `MountCursor` tracks which source partitions have been processed. On each call to `handle(target)`:
-
-1. Fetches pending source partitions not yet in the cursor, filtered by `PartitionWindowPolicy`.
-2. Reads the current materialized state.
-3. Merges each new partition into the current state via `MergeableMountAggregator`.
-4. Writes the merged result.
-5. Advances the cursor for all processed partitions.
-
-If there are no new closed partitions, no write occurs.
-
----
-
-## Scaling
-
-Add the `.scaling()` facet to the polling mounter to handle large data sets. Mounter will discover sub-partitions, optionally split large ones into slices, and dispatch them in parallel.
+Process large data sets by dispatching sub-partitions in parallel.
 
 ```java
 Mounter mounter = MounterBuilderFactory.polling(reader)
-    .aggregatingWith(aggregator)
-    .mount()
-        .writingWith(writer)
-        .onTarget(target)
-        .partitioningWith(schema)
-        .and()
-    .checkpoint()
-        .windowPolicy(windowPolicy)
-        .checkpoint(checkpoint)
-        .and()
-    .scheduling()
-        .pollingWith(pollingPolicy)
-        .and()
-    .scaling()
-        .discoveringWith(discovery)
-        .splittingWith(splitter)
-        .scalingWith(ThresholdScalingPolicy.of(5, 100, 1_000_000))
-        .dispatchingWith(new ThreadPoolPartitionDispatcher(executor))
-        .and()
-    .build();
+        .aggregatingWith(aggregator)
+        .mount()
+            .writingWith(writer)
+            .onTarget(target)
+            .partitioningWith(schema)
+            .and()
+        .checkpoint()
+            .windowPolicy(windowPolicy)
+            .checkpoint(checkpoint)
+            .and()
+        .scheduling()
+            .pollingWith(pollingPolicy)
+            .and()
+        .scaling()
+            .discoveringWith(discovery)
+            .splittingWith(splitter)
+            .scalingWith(ThresholdScalingPolicy.of(5, 100, 1_000_000))
+            .dispatchingWith(new ThreadPoolPartitionDispatcher(executor))
+            .and()
+        .build();
 ```
 
-`ThresholdScalingPolicy.of(localAbove, distributedAbove, splitAboveRecords)` selects the execution mode automatically:
+`ThresholdScalingPolicy.of(localAbove, distributedAbove, splitAboveRecords)`:
 
 | Condition | Mode |
 |---|---|
@@ -195,33 +213,36 @@ Mounter mounter = MounterBuilderFactory.polling(reader)
 | Partitions > `localAbove` or any partition > `splitAboveRecords` records | Local parallel |
 | Partitions > `distributedAbove` | Distributed |
 
-For separate local and distributed dispatchers:
+---
 
-```java
-.scaling()
-    .dispatchingWith(localDispatcher, distributedDispatcher)
-    .and()
-```
+## Key Concepts
+
+| Concept | Description |
+|---|---|
+| **`PartitionedReader`** | Reads raw records from a source partition. |
+| **`DataMartWriter`** | Writes aggregated results to the target store. |
+| **`MountAggregator<R>`** | Transforms a stream of records into a typed result `R`. |
+| **`MountTarget`** | Identifies the output data mart and source partition. Factory methods: `transformation()`, `aggregation()`. |
+| **`PartitionWindowPolicy`** | Decides whether a partition is closed and ready to process. |
+| **`MountCheckpoint`** | Tracks which partitions have already been mounted. |
+| **`MounterBuilderFactory`** | DSL entry point with `polling()` and `reactive()` presets. |
 
 ---
 
 ## Built-in Adapters
 
-Ready-to-use implementations for common scenarios:
-
 | Class | Description |
 |---|---|
-| `AlwaysClosedWindowPolicy` | Treats every partition as closed — suitable for non-windowed sources or tests |
-| `NoOpMountCheckpoint` | Never records a mounted partition — re-mounts everything on each run |
-| `NoOpMountCursor` | Reports no processed sources — processes all partitions on each run |
-| `PassThroughMountAggregator` | Emits each record unchanged as the aggregation result |
-| `ThresholdScalingPolicy` | Selects sequential / local parallel / distributed mode based on partition and record count thresholds |
-| `SequentialPartitionDispatcher` | Processes mount units one at a time in the calling thread |
-| `ThreadPoolPartitionDispatcher` | Processes mount units in parallel using a provided `Executor` |
-| `MounterErrorRouter` | Default error router that publishes errors to the event bus |
+| `AlwaysClosedWindowPolicy` | Treats every partition as closed — suitable for non-windowed sources or tests. |
+| `NoOpMountCheckpoint` | Never records a mounted partition — re-mounts everything on each run. |
+| `NoOpMountCursor` | Reports no processed sources — processes all partitions on each run. |
+| `PassThroughMountAggregator` | Emits each record unchanged as the aggregation result. |
+| `ThresholdScalingPolicy` | Selects sequential / local parallel / distributed based on thresholds. |
+| `SequentialPartitionDispatcher` | Processes mount units one at a time in the calling thread. |
+| `ThreadPoolPartitionDispatcher` | Processes mount units in parallel using a provided `Executor`. |
 
 ---
 
 ## License
 
-[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0.txt)
+Distributed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
