@@ -14,7 +14,7 @@ public class MounterBuilderFactory {
         return new Configuration().reactive(bus);
     }
 
-    public static <I> PollingMounterBuilder<I> polling(PartitionedReader<I> reader) {
+    public static <I, O> PollingMounterBuilder<I, O> polling(PartitionedReader reader) {
         return new Configuration().polling(reader);
     }
 
@@ -31,7 +31,7 @@ public class MounterBuilderFactory {
             this(null, "mounter");
         }
 
-        public <I> PollingMounterBuilder<I> polling(PartitionedReader<I> reader) {
+        public <I, O> PollingMounterBuilder<I, O> polling(PartitionedReader reader) {
             return new PollingMounterBuilder<>(reader, buildHeartbeat(watchdogUrl, moduleId));
         }
 

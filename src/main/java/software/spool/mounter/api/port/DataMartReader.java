@@ -1,3 +1,3 @@
 package software.spool.mounter.api.port;
 
-public interface DataMartReader<I> extends PartitionedReader<I> {}
+public interface DataMartReader extends PartitionedReader {}

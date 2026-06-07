@@ -13,8 +13,7 @@ public class PollingMountStrategy extends BaseMountStrategy implements MountStra
     private final MountTarget target;
     private final PollingPolicy policy;
 
-    public PollingMountStrategy(MountTarget target, Handler<MountTarget> handler, ErrorRouter errorRouter,
-                                PollingScheduler scheduler, PollingPolicy policy) {
+    public PollingMountStrategy(MountTarget target, Handler<MountTarget> handler, ErrorRouter errorRouter, PollingScheduler scheduler, PollingPolicy policy) {
         super(handler, errorRouter);
         this.scheduler = scheduler;
         this.target = target;

@@ -2,31 +2,32 @@ package software.spool.mounter.internal.decorator;
 
 import software.spool.core.exception.DataLakeReadException;
 import software.spool.core.exception.SpoolException;
-import software.spool.core.model.vo.PartitionKey;
+import software.spool.mounter.api.model.GenericRecord;
+import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedReader;
 import software.spool.mounter.api.port.PartitionedRecord;
 
-import java.util.List;
+import java.util.stream.Stream;
 
-public class SafePartitionedReader<I> implements PartitionedReader<I> {
-    private final PartitionedReader<I> reader;
+public class SafePartitionedReader implements PartitionedReader {
+    private final PartitionedReader reader;
 
-    public SafePartitionedReader(PartitionedReader<I> reader) {
+    public SafePartitionedReader(PartitionedReader reader) {
         this.reader = reader;
     }
 
-    public static <I> SafePartitionedReader<I> of(PartitionedReader<I> reader) {
-        return new SafePartitionedReader<>(reader);
+    public static SafePartitionedReader of(PartitionedReader reader) {
+        return new SafePartitionedReader(reader);
     }
 
     @Override
-    public List<PartitionedRecord<I>> read(PartitionKey partitionKey) {
+    public Stream<PartitionedRecord<GenericRecord>> read(MountTarget mountTarget) {
         try {
-            return reader.read(partitionKey);
+            return reader.read(mountTarget);
         } catch (SpoolException e) {
             throw e;
         } catch (Exception e) {
-            throw new DataLakeReadException(partitionKey, e.getMessage());
+            throw new DataLakeReadException(mountTarget.sourceKey(), e.getMessage(), e);
         }
     }
 }

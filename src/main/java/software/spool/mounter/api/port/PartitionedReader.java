@@ -1,9 +1,9 @@
 package software.spool.mounter.api.port;
 
-import software.spool.core.model.vo.PartitionKey;
+import software.spool.mounter.api.model.GenericRecord;
 
-import java.util.List;
+import java.util.stream.Stream;
 
-public interface PartitionedReader<I> {
-    List<PartitionedRecord<I>> read(PartitionKey partitionKey);
+public interface PartitionedReader {
+    Stream<PartitionedRecord<GenericRecord>> read(MountTarget mountTarget);
 }

@@ -1,6 +1,6 @@
 package software.spool.mounter.internal.strategy;
 
-import software.spool.core.model.event.ItemPersisted;
+import software.spool.core.model.event.EnvelopePersisted;
 import software.spool.core.port.bus.EventBus;
 import software.spool.core.port.bus.Handler;
 import software.spool.core.utils.polling.CancellationToken;
@@ -20,6 +20,6 @@ public class ReactiveMountStrategy extends BaseMountStrategy implements MountStr
 
     @Override
     public void execute(CancellationToken token) {
-        bus.on(ItemPersisted.class, i -> mountSafely(target));
+        bus.subscribe(EnvelopePersisted.class, i -> mountSafely(target));
     }
 }
