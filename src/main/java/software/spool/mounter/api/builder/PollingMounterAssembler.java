@@ -49,10 +49,10 @@ class PollingMounterAssembler {
                 ? SafePartitionSplitter.of(b.scaling.splitter) : null;
 
         Pipeline<PipelineContext, PipelineContext> pipeline = Pipeline.<PipelineContext>start()
-                .add(new ObservedStep<>("discover-partitions",  new DiscoverPartitionsStep(discovery)))
+                .add(new ObservedStep<>("discover-partitions", new DiscoverPartitionsStep(discovery)))
                 .add(new ObservedStep<>("resolve-scaling-plan", new ResolveScalingPlanStep(scalingPolicy)))
-                .add(new ObservedStep<>("build-mount-units",    new BuildMountUnitsStep(splitter)))
-                .add(new ObservedStep<>("dispatch-units",       new DispatchUnitsStep(seq, distributed, unitHandler)));
+                .add(new ObservedStep<>("build-mount-units", new BuildMountUnitsStep(splitter)))
+                .add(new ObservedStep<>("dispatch-units", new DispatchUnitsStep(seq, distributed, unitHandler)));
 
         MountStrategy strategy = new PollingMountStrategy(effectiveTarget, new AtomicMountHandler(pipeline), router,
                 b.scheduling.scheduler, b.scheduling.pollingPolicy);
