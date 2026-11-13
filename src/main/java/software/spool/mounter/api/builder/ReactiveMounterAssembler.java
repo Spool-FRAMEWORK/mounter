@@ -27,7 +27,7 @@ class ReactiveMounterAssembler {
                 MounterErrorRouter.defaults(b.bus));
 
         MountUnitHandler<O> unitHandler = new MountUnitHandler<>(
-                SafePartitionedReader.of(b.reader),
+                SafePartitionedReader.of(b.validation.readerFor(b.reader, b.mount.target, b.bus)),
                 SafeMountAggregator.of(b.aggregator),
                 SafeDataMartWriter.of(b.mount.writer),
                 b.checkpoint.windowPolicy, b.checkpoint.checkpoint,

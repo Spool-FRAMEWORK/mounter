@@ -29,7 +29,7 @@ class PollingMounterAssembler {
                 : b.mount.target;
 
         MountUnitHandler<R> unitHandler = new MountUnitHandler<>(
-                SafePartitionedReader.of(b.reader),
+                SafePartitionedReader.of(b.validation.readerFor(b.reader, effectiveTarget, b.scheduling.publisher)),
                 SafeMountAggregator.of(b.aggregator),
                 SafeDataMartWriter.of(b.mount.writer),
                 b.checkpoint.windowPolicy, b.checkpoint.checkpoint,
