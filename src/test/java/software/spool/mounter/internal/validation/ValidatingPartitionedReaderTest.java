@@ -7,7 +7,9 @@ import software.spool.core.adapter.memory.InMemoryQuarantineRepository;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.Event;
 import software.spool.core.model.failure.EnvelopeQuarantined;
+import software.spool.core.model.quarantine.QuarantineLocation;
 import software.spool.core.model.quarantine.QuarantineReason;
+import software.spool.core.model.quarantine.QuarantineStatus;
 import software.spool.core.model.quarantine.QuarantinedRecord;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.EventMetadata;
@@ -60,6 +62,15 @@ class ValidatingPartitionedReaderTest {
         assertThat(quarantinedRecord.envelope().metadata().get(EventMetadataKey.SOURCE)).isEqualTo("products");
         assertThat(quarantinedRecord.reason()).isEqualTo(QuarantineReason.VALIDATION_FAILED);
         assertThat(quarantinedRecord.violations()).anyMatch(violation -> violation.contains("SKU must not be blank"));
+    }
+
+    @Test
+    void read_recordThatFailsACriticalValidator_recordsThatItStayedInItsBronzePartition() {
+        readerOver(bronze("k2", "{\"sku\":\"\",\"price\":10}")).read(TARGET).toList();
+
+        QuarantinedRecord quarantinedRecord = repository.find(IdempotencyKey.of("k2")).orElseThrow();
+        assertThat(quarantinedRecord.location()).isEqualTo(QuarantineLocation.bronze(PARTITION));
+        assertThat(quarantinedRecord.status()).isEqualTo(QuarantineStatus.PENDING);
     }
 
     @Test

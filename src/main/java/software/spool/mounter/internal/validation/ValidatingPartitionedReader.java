@@ -5,14 +5,16 @@ import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.adapter.logging.LoggerFactory;
 import software.spool.core.model.failure.EnvelopeQuarantined;
 import software.spool.core.model.quarantine.QuarantineReason;
-import software.spool.core.model.quarantine.QuarantinedRecord;
+import software.spool.core.model.quarantine.QuarantineLocation;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.EventMetadataKey;
+import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.logging.Logger;
 import software.spool.core.port.metrics.MetricsRegistry;
 import software.spool.core.port.metrics.SpoolMetrics;
 import software.spool.core.port.quarantine.QuarantineRepository;
+import software.spool.core.utils.quarantine.QuarantineRecorder;
 import software.spool.mounter.api.MountMode;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.MountTarget;
@@ -31,7 +33,8 @@ import java.util.stream.Stream;
  *
  * <p>
  * A record that fails a critical validator does not reach the aggregator: it is kept in the quarantine with its
- * envelope and violations, {@link EnvelopeQuarantined} is published and it counts as rejected. It stays in bronze.
+ * envelope, its bronze partition and its violations, {@link EnvelopeQuarantined} is published and it counts as
+ * rejected. It stays in bronze.
  * Records of other mounts pass through untouched.
  * </p>
  */
@@ -42,7 +45,7 @@ public class ValidatingPartitionedReader implements PartitionedReader {
 
     private final PartitionedReader reader;
     private final EnvelopeValidator validator;
-    private final QuarantineRepository quarantineRepository;
+    private final QuarantineRecorder recorder;
     private final EventPublisher publisher;
     private final MetricsRegistry.CounterMetric recordsRejected;
 
@@ -51,7 +54,7 @@ public class ValidatingPartitionedReader implements PartitionedReader {
                                        MetricsRegistry.CounterMetric recordsRejected) {
         this.reader = reader;
         this.validator = validator;
-        this.quarantineRepository = quarantineRepository;
+        this.recorder = new QuarantineRecorder(quarantineRepository);
         this.publisher = publisher;
         this.recordsRejected = recordsRejected;
     }
@@ -67,12 +70,12 @@ public class ValidatingPartitionedReader implements PartitionedReader {
         Envelope envelope = envelopeOf(partitionedRecord.record());
         ValidationResult result = validator.validate(envelope);
         if (!result.isQuarantine()) return true;
-        quarantine(envelope, result.getViolations().stream().map(Throwable::getMessage).toList());
+        quarantine(envelope, partitionedRecord.partitionKey(), result.getViolations().stream().map(Throwable::getMessage).toList());
         return false;
     }
 
-    private void quarantine(Envelope envelope, List<String> violations) {
-        quarantineRepository.save(new QuarantinedRecord(envelope, QuarantineReason.VALIDATION_FAILED, violations, Instant.now()));
+    private void quarantine(Envelope envelope, PartitionKey partition, List<String> violations) {
+        recorder.record(envelope, QuarantineLocation.bronze(partition), QuarantineReason.VALIDATION_FAILED, violations, Instant.now());
         publisher.publish(EnvelopeQuarantined.builder()
                 .correlationId(envelope.metadata().get(EventMetadataKey.CORRELATION_ID))
                 .idempotencyKey(envelope.idempotencyKey())
