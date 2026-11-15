@@ -3,13 +3,15 @@ package software.spool.mounter.internal.validation;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.adapter.logging.LoggerFactory;
+import software.spool.core.exception.BronzeRepositoryException;
 import software.spool.core.model.failure.EnvelopeQuarantined;
-import software.spool.core.model.quarantine.QuarantineReason;
 import software.spool.core.model.quarantine.QuarantineLocation;
+import software.spool.core.model.quarantine.QuarantineReason;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.EventMetadataKey;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.EventPublisher;
+import software.spool.core.port.datalake.BronzeRepository;
 import software.spool.core.port.logging.Logger;
 import software.spool.core.port.metrics.MetricsRegistry;
 import software.spool.core.port.metrics.SpoolMetrics;
@@ -33,9 +35,9 @@ import java.util.stream.Stream;
  *
  * <p>
  * A record that fails a critical validator does not reach the aggregator: it is kept in the quarantine with its
- * envelope, its bronze partition and its violations, {@link EnvelopeQuarantined} is published and it counts as
- * rejected. It stays in bronze.
- * Records of other mounts pass through untouched.
+ * envelope, its bronze partition and its violations, then removed from bronze so the next mount does not read it
+ * again. {@link EnvelopeQuarantined} is published and it counts as rejected. Records of other mounts pass through
+ * untouched.
  * </p>
  */
 public class ValidatingPartitionedReader implements PartitionedReader {
@@ -46,15 +48,17 @@ public class ValidatingPartitionedReader implements PartitionedReader {
     private final PartitionedReader reader;
     private final EnvelopeValidator validator;
     private final QuarantineRecorder recorder;
+    private final BronzeRepository bronzeRepository;
     private final EventPublisher publisher;
     private final MetricsRegistry.CounterMetric recordsRejected;
 
     public ValidatingPartitionedReader(PartitionedReader reader, EnvelopeValidator validator,
-                                       QuarantineRepository quarantineRepository, EventPublisher publisher,
-                                       MetricsRegistry.CounterMetric recordsRejected) {
+                                       QuarantineRepository quarantineRepository, BronzeRepository bronzeRepository,
+                                       EventPublisher publisher, MetricsRegistry.CounterMetric recordsRejected) {
         this.reader = reader;
         this.validator = validator;
         this.recorder = new QuarantineRecorder(quarantineRepository);
+        this.bronzeRepository = bronzeRepository;
         this.publisher = publisher;
         this.recordsRejected = recordsRejected;
     }
@@ -75,15 +79,27 @@ public class ValidatingPartitionedReader implements PartitionedReader {
     }
 
     private void quarantine(Envelope envelope, PartitionKey partition, List<String> violations) {
-        recorder.record(envelope, QuarantineLocation.bronze(partition), QuarantineReason.VALIDATION_FAILED, violations, Instant.now());
+        QuarantineLocation location = QuarantineLocation.bronze(partition);
+        recorder.record(envelope, location, QuarantineReason.VALIDATION_FAILED, violations, Instant.now());
+        removeFromBronze(envelope, partition);
         publisher.publish(EnvelopeQuarantined.builder()
                 .correlationId(envelope.metadata().get(EventMetadataKey.CORRELATION_ID))
                 .idempotencyKey(envelope.idempotencyKey())
                 .reason(QuarantineReason.VALIDATION_FAILED)
                 .violations(violations)
+                .location(location)
                 .build());
         recordsRejected.add(1, REJECTED_ATTRIBUTES);
         LOG.warn("Kept {} out of silver and sent it to quarantine: {}", envelope.idempotencyKey().value(), violations);
+    }
+
+    private void removeFromBronze(Envelope envelope, PartitionKey partition) {
+        try {
+            bronzeRepository.delete(partition, envelope.idempotencyKey());
+        } catch (BronzeRepositoryException e) {
+            LOG.error("Envelope {} stays in bronze partition {} although it is in quarantine: {}",
+                    envelope.idempotencyKey().value(), partition.value(), e.getMessage());
+        }
     }
 
     private static Envelope envelopeOf(GenericRecord bronzeRecord) {

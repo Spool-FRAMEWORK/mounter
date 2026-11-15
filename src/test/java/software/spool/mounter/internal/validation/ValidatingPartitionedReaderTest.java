@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.adapter.memory.InMemoryQuarantineRepository;
+import software.spool.core.exception.BronzeRepositoryException;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.Event;
 import software.spool.core.model.failure.EnvelopeQuarantined;
@@ -18,6 +19,7 @@ import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.model.vo.MediaType;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.EventPublisher;
+import software.spool.core.port.datalake.BronzeRepository;
 import software.spool.core.port.metrics.SpoolMetrics;
 import software.spool.mounter.api.fixture.validation.PositivePriceValidator;
 import software.spool.mounter.api.fixture.validation.SkuNotBlankValidator;
@@ -28,9 +30,11 @@ import software.spool.mounter.api.port.PartitionedRecord;
 import software.spool.validator.api.EnvelopeValidator;
 import software.spool.validator.engine.ValidatorRegistry;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -42,6 +46,8 @@ class ValidatingPartitionedReaderTest {
     private static final MountTarget TARGET = MountTarget.transformation("products", PARTITION);
 
     private final InMemoryQuarantineRepository repository = new InMemoryQuarantineRepository();
+    private final Map<IdempotencyKey, PartitionedRecord<GenericRecord>> bronzeFiles = new LinkedHashMap<>();
+    private final List<IdempotencyKey> failingDeletes = new ArrayList<>();
     private final List<Event> published = new ArrayList<>();
     private final List<Map<String, String>> rejected = new ArrayList<>();
 
@@ -74,14 +80,44 @@ class ValidatingPartitionedReaderTest {
     }
 
     @Test
-    void read_recordThatFailsACriticalValidator_publishesEnvelopeQuarantined() {
+    void read_recordThatFailsACriticalValidator_publishesEnvelopeQuarantinedSayingItStayedInBronze() {
         readerOver(bronze("k2", "{\"sku\":\"\",\"price\":10}")).read(TARGET).toList();
 
         assertThat(published).singleElement().isInstanceOfSatisfying(EnvelopeQuarantined.class, event -> {
             assertThat(event.idempotencyKey()).isEqualTo(IdempotencyKey.of("k2"));
             assertThat(event.reason()).isEqualTo(QuarantineReason.VALIDATION_FAILED);
             assertThat(event.violations()).anyMatch(violation -> violation.contains("SKU must not be blank"));
+            assertThat(event.location()).isEqualTo(QuarantineLocation.bronze(PARTITION));
         });
+    }
+
+    @Test
+    void read_recordThatFailsACriticalValidator_removesItFromBronze() {
+        readerOver(bronze("k1", "{\"sku\":\"A-1\",\"price\":10}"), bronze("k2", "{\"sku\":\"\",\"price\":10}"))
+                .read(TARGET).toList();
+
+        assertThat(bronzeFiles.keySet()).containsExactly(IdempotencyKey.of("k1"));
+    }
+
+    @Test
+    void read_whenRemovingFromBronzeFails_theQuarantineRecordIsAlreadyKept() {
+        failingDeletes.add(IdempotencyKey.of("k2"));
+
+        List<PartitionedRecord<GenericRecord>> read = readerOver(bronze("k2", "{\"sku\":\"\",\"price\":10}")).read(TARGET).toList();
+
+        assertThat(read).isEmpty();
+        assertThat(repository.find(IdempotencyKey.of("k2"))).isPresent();
+    }
+
+    @Test
+    void read_samePartitionTwice_quarantinesTheRecordOnlyOnce() {
+        PartitionedReader reader = readerOver(bronze("k2", "{\"sku\":\"\",\"price\":10}"));
+
+        reader.read(TARGET).toList();
+        reader.read(TARGET).toList();
+
+        assertThat(published).hasSize(1);
+        assertThat(repository.find(IdempotencyKey.of("k2")).orElseThrow().history()).hasSize(1);
     }
 
     @Test
@@ -114,10 +150,26 @@ class ValidatingPartitionedReaderTest {
     }
 
     private PartitionedReader readerOver(PartitionedRecord<GenericRecord>... records) {
-        PartitionedReader bronze = target -> List.of(records).stream();
+        for (PartitionedRecord<GenericRecord> bronzeRecord : records) {
+            bronzeFiles.put(IdempotencyKey.of(bronzeRecord.record().getNested("idempotencyKey").getString("value")), bronzeRecord);
+        }
+        PartitionedReader bronze = target -> List.copyOf(bronzeFiles.values()).stream();
+        BronzeRepository bronzeRepository = new BronzeRepository() {
+            @Override
+            public void save(PartitionKey partition, Envelope envelope) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void delete(PartitionKey partition, IdempotencyKey idempotencyKey) {
+                if (failingDeletes.contains(idempotencyKey)) throw new BronzeRepositoryException("disk full", new IOException());
+                if (partition.equals(PARTITION)) bronzeFiles.remove(idempotencyKey);
+            }
+        };
         return new ValidatingPartitionedReader(bronze,
                 new EnvelopeValidator(new ValidatorRegistry(List.of(new SkuNotBlankValidator(), new PositivePriceValidator()))),
                 repository,
+                bronzeRepository,
                 new EventPublisher() {
                     @Override
                     public <E extends Event> void publish(E event) {
