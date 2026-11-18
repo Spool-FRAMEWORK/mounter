@@ -60,6 +60,15 @@ class ValidatingPartitionedReaderTest {
     }
 
     @Test
+    void read_recordsWithTheirPayloadAlreadyDecoded_passesTheValidOneAndQuarantinesTheOther() {
+        List<PartitionedRecord<GenericRecord>> read = readerOver(decodedBronze("k1", "{\"sku\":\"A-1\",\"price\":10}"),
+                decodedBronze("k2", "{\"sku\":\"\",\"price\":10}")).read(TARGET).toList();
+
+        assertThat(read).extracting(record -> record.record().getNested("idempotencyKey").getString("value")).containsExactly("k1");
+        assertThat(repository.find(IdempotencyKey.of("k2"))).isPresent();
+    }
+
+    @Test
     void read_recordThatFailsACriticalValidator_keepsItsQuarantineRecord() {
         readerOver(bronze("k2", "{\"sku\":\"\",\"price\":10}")).read(TARGET).toList();
 
@@ -185,6 +194,12 @@ class ValidatingPartitionedReaderTest {
                 Instant.now(), Instant.now());
         Map<String, Object> fields = PayloadDeserializerFactory.json().asMap()
                 .deserialize(RecordSerializerFactory.record().serialize(envelope));
+        return new PartitionedRecord<>(PARTITION, GenericRecord.of(fields));
+    }
+
+    private static PartitionedRecord<GenericRecord> decodedBronze(String key, String payload) {
+        Map<String, Object> fields = new LinkedHashMap<>(bronze(key, payload).record().toMap());
+        fields.put("payload", PayloadDeserializerFactory.json().asMap().deserialize(payload.getBytes(StandardCharsets.UTF_8)));
         return new PartitionedRecord<>(PARTITION, GenericRecord.of(fields));
     }
 }

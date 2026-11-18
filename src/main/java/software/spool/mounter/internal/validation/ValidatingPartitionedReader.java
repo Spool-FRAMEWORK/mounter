@@ -26,6 +26,8 @@ import software.spool.validator.api.EnvelopeValidator;
 import software.spool.validator.api.ValidationResult;
 
 import java.time.Instant;
+import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -42,6 +44,7 @@ import java.util.stream.Stream;
  */
 public class ValidatingPartitionedReader implements PartitionedReader {
     private static final Logger LOG = LoggerFactory.getLogger(ValidatingPartitionedReader.class);
+    private static final String PAYLOAD = "payload";
     private static final Map<String, String> REJECTED_ATTRIBUTES =
             Map.of(SpoolMetrics.Attributes.REASON, "invalid", SpoolMetrics.Attributes.MODULE, "mounter");
 
@@ -103,7 +106,13 @@ public class ValidatingPartitionedReader implements PartitionedReader {
     }
 
     private static Envelope envelopeOf(GenericRecord bronzeRecord) {
+        Map<String, Object> fields = new LinkedHashMap<>(bronzeRecord.toMap());
+        fields.computeIfPresent(PAYLOAD, (key, payload) -> payload instanceof String encoded ? encoded : encoded(payload));
         return PayloadDeserializerFactory.json().as(Envelope.class)
-                .deserialize(RecordSerializerFactory.record().serialize(bronzeRecord.toMap()));
+                .deserialize(RecordSerializerFactory.record().serialize(fields));
+    }
+
+    private static String encoded(Object decodedPayload) {
+        return Base64.getEncoder().encodeToString(RecordSerializerFactory.record().serialize(decodedPayload));
     }
 }
