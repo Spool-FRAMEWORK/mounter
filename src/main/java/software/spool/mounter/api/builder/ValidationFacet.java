@@ -2,7 +2,7 @@ package software.spool.mounter.api.builder;
 
 import software.spool.core.adapter.otel.OpenTelemetryMetricsRegistry;
 import software.spool.core.port.bus.EventPublisher;
-import software.spool.core.port.datalake.BronzeEnvelopeRemover;
+import software.spool.core.port.datalake.DataLakeEnvelopeRemover;
 import software.spool.core.port.metrics.MetricsRegistry;
 import software.spool.core.port.metrics.SpoolMetrics;
 import software.spool.core.port.quarantine.QuarantineRepository;
@@ -19,11 +19,11 @@ import java.util.Optional;
 /**
  * Validates on read what a {@code TRANSFORMATION} mount promotes from bronze to silver, with the validators of each
  * source, the same ones the ingester uses. Off until a quarantine is given with {@link #quarantineIn}; then the
- * bronze records it rejects are removed with the remover given in {@link #removingFromBronzeWith}.
+ * bronze records it rejects are removed with the remover given in {@link #removingFromDataLakeWith}.
  */
 public class ValidationFacet<B> extends MounterFacet<B> {
     private QuarantineRepository quarantineRepository;
-    private BronzeEnvelopeRemover bronzeEnvelopeRemover;
+    private DataLakeEnvelopeRemover dataLakeEnvelopeRemover;
     private ValidatorRegistry registry;
 
     ValidationFacet(B parent) { super(parent); }
@@ -40,8 +40,8 @@ public class ValidationFacet<B> extends MounterFacet<B> {
      * Sets where the rejected records are removed from, which must be the bronze layer the mount reads. Required when
      * validation is on.
      */
-    public ValidationFacet<B> removingFromBronzeWith(BronzeEnvelopeRemover bronzeEnvelopeRemover) {
-        this.bronzeEnvelopeRemover = bronzeEnvelopeRemover;
+    public ValidationFacet<B> removingFromDataLakeWith(DataLakeEnvelopeRemover dataLakeEnvelopeRemover) {
+        this.dataLakeEnvelopeRemover = dataLakeEnvelopeRemover;
         return this;
     }
 
@@ -60,12 +60,12 @@ public class ValidationFacet<B> extends MounterFacet<B> {
                     + target.mode());
         }
         Objects.requireNonNull(publisher, "EventPublisher required to validate on read; set it with scheduling().emittingWith(...)");
-        Objects.requireNonNull(bronzeEnvelopeRemover, "BronzeEnvelopeRemover required to validate on read; set it with validation().removingFromBronzeWith(...)");
+        Objects.requireNonNull(dataLakeEnvelopeRemover, "DataLakeEnvelopeRemover required to validate on read; set it with validation().removingFromDataLakeWith(...)");
         MetricsRegistry metrics = new OpenTelemetryMetricsRegistry();
         return new ValidatingPartitionedReader(reader,
                 new EnvelopeValidator(Optional.ofNullable(registry).orElseGet(ValidatorRegistry::new)),
                 quarantineRepository,
-                bronzeEnvelopeRemover,
+                dataLakeEnvelopeRemover,
                 publisher,
                 metrics.counter(SpoolMetrics.Validation.RECORDS_REJECTED_TOTAL, SpoolMetrics.Validation.RECORDS_REJECTED_TOTAL_DESC, "1"));
     }
