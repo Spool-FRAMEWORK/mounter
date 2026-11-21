@@ -18,6 +18,10 @@ public class MounterBuilderFactory {
         return new Configuration().polling(reader);
     }
 
+    public static Configuration watchdog(String url, String moduleId) {
+        return new Configuration(url, moduleId);
+    }
+
     public static final class Configuration {
         private final String watchdogUrl;
         private final String moduleId;
