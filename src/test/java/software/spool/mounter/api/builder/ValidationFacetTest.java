@@ -1,7 +1,7 @@
 package software.spool.mounter.api.builder;
 
 import org.junit.jupiter.api.Test;
-import software.spool.core.adapter.memory.InMemoryBronzeRepository;
+import software.spool.core.adapter.memory.InMemoryBronze;
 import software.spool.core.adapter.memory.InMemoryQuarantineRepository;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.EventBus;
@@ -34,19 +34,19 @@ class ValidationFacetTest {
     @Test
     void readerFor_withValidationOnATransformation_validatesWhatItReads() {
         ValidationFacet<Object> validation = new ValidationFacet<>(new Object()).quarantineIn(new InMemoryQuarantineRepository())
-                .removingFromBronzeWith(new InMemoryBronzeRepository());
+                .removingFromBronzeWith(new InMemoryBronze());
 
         assertThat(validation.readerFor(BRONZE, MountTarget.transformation("products", PARTITION), mock(EventPublisher.class)))
                 .isInstanceOf(ValidatingPartitionedReader.class);
     }
 
     @Test
-    void readerFor_validationWithoutBronzeRepository_failsWithAClearMessage() {
+    void readerFor_validationWithoutBronzeEnvelopeRemover_failsWithAClearMessage() {
         ValidationFacet<Object> validation = new ValidationFacet<>(new Object()).quarantineIn(new InMemoryQuarantineRepository());
 
         assertThatThrownBy(() -> validation.readerFor(BRONZE, MountTarget.transformation("products", PARTITION), mock(EventPublisher.class)))
                 .isInstanceOf(NullPointerException.class)
-                .hasMessage("BronzeRepository required to validate on read; set it with validation().removingFromBronzeWith(...)");
+                .hasMessage("BronzeEnvelopeRemover required to validate on read; set it with validation().removingFromBronzeWith(...)");
     }
 
     @Test
@@ -55,7 +55,7 @@ class ValidationFacetTest {
                 .readingWith(BRONZE)
                 .aggregatingWith(records -> Stream.of())
                 .mount().onTarget(MountTarget.aggregation("products", PARTITION)).writingWith(mock(DataMartWriter.class)).and()
-                .validation().quarantineIn(new InMemoryQuarantineRepository()).removingFromBronzeWith(new InMemoryBronzeRepository()).and();
+                .validation().quarantineIn(new InMemoryQuarantineRepository()).removingFromBronzeWith(new InMemoryBronze()).and();
 
         assertThatThrownBy(builder::build)
                 .isInstanceOf(IllegalStateException.class)
@@ -69,7 +69,7 @@ class ValidationFacetTest {
                 .readingWith(BRONZE)
                 .aggregatingWith(records -> Stream.of())
                 .mount().onTarget(MountTarget.transformation("products", PARTITION)).writingWith(mock(DataMartWriter.class)).and()
-                .validation().quarantineIn(new InMemoryQuarantineRepository()).removingFromBronzeWith(new InMemoryBronzeRepository()).and();
+                .validation().quarantineIn(new InMemoryQuarantineRepository()).removingFromBronzeWith(new InMemoryBronze()).and();
 
         assertThatCode(builder::build).doesNotThrowAnyException();
     }
@@ -79,7 +79,7 @@ class ValidationFacetTest {
         PollingMounterBuilder<Object, Object> builder = MounterBuilderFactory.<Object, Object>polling(BRONZE)
                 .aggregatingWith(records -> Stream.of())
                 .mount().onTarget(MountTarget.transformation("products", PARTITION)).writingWith(mock(DataMartWriter.class)).and()
-                .validation().quarantineIn(new InMemoryQuarantineRepository()).removingFromBronzeWith(new InMemoryBronzeRepository()).and();
+                .validation().quarantineIn(new InMemoryQuarantineRepository()).removingFromBronzeWith(new InMemoryBronze()).and();
 
         assertThatThrownBy(builder::build)
                 .isInstanceOf(NullPointerException.class)

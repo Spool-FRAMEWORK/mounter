@@ -3,7 +3,7 @@ package software.spool.mounter.internal.validation;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.adapter.logging.LoggerFactory;
-import software.spool.core.exception.BronzeRepositoryException;
+import software.spool.core.exception.BronzeRemovalException;
 import software.spool.core.model.failure.EnvelopeQuarantined;
 import software.spool.core.model.quarantine.QuarantineLocation;
 import software.spool.core.model.quarantine.QuarantineReason;
@@ -11,7 +11,7 @@ import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.EventMetadataKey;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.EventPublisher;
-import software.spool.core.port.datalake.BronzeRepository;
+import software.spool.core.port.datalake.BronzeEnvelopeRemover;
 import software.spool.core.port.logging.Logger;
 import software.spool.core.port.metrics.MetricsRegistry;
 import software.spool.core.port.metrics.SpoolMetrics;
@@ -51,17 +51,17 @@ public class ValidatingPartitionedReader implements PartitionedReader {
     private final PartitionedReader reader;
     private final EnvelopeValidator validator;
     private final QuarantineRecorder recorder;
-    private final BronzeRepository bronzeRepository;
+    private final BronzeEnvelopeRemover bronzeEnvelopeRemover;
     private final EventPublisher publisher;
     private final MetricsRegistry.CounterMetric recordsRejected;
 
     public ValidatingPartitionedReader(PartitionedReader reader, EnvelopeValidator validator,
-                                       QuarantineRepository quarantineRepository, BronzeRepository bronzeRepository,
+                                       QuarantineRepository quarantineRepository, BronzeEnvelopeRemover bronzeEnvelopeRemover,
                                        EventPublisher publisher, MetricsRegistry.CounterMetric recordsRejected) {
         this.reader = reader;
         this.validator = validator;
         this.recorder = new QuarantineRecorder(quarantineRepository);
-        this.bronzeRepository = bronzeRepository;
+        this.bronzeEnvelopeRemover = bronzeEnvelopeRemover;
         this.publisher = publisher;
         this.recordsRejected = recordsRejected;
     }
@@ -98,8 +98,8 @@ public class ValidatingPartitionedReader implements PartitionedReader {
 
     private void removeFromBronze(Envelope envelope, PartitionKey partition) {
         try {
-            bronzeRepository.delete(partition, envelope.idempotencyKey());
-        } catch (BronzeRepositoryException e) {
+            bronzeEnvelopeRemover.remove(partition, envelope.idempotencyKey());
+        } catch (BronzeRemovalException e) {
             LOG.error("Envelope {} stays in bronze partition {} although it is in quarantine: {}",
                     envelope.idempotencyKey().value(), partition.value(), e.getMessage());
         }

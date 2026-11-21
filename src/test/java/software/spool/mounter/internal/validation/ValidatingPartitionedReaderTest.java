@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.adapter.memory.InMemoryQuarantineRepository;
-import software.spool.core.exception.BronzeRepositoryException;
+import software.spool.core.exception.BronzeRemovalException;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.Event;
 import software.spool.core.model.failure.EnvelopeQuarantined;
@@ -19,7 +19,7 @@ import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.model.vo.MediaType;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.EventPublisher;
-import software.spool.core.port.datalake.BronzeRepository;
+import software.spool.core.port.datalake.BronzeEnvelopeRemover;
 import software.spool.core.port.metrics.SpoolMetrics;
 import software.spool.mounter.api.fixture.validation.PositivePriceValidator;
 import software.spool.mounter.api.fixture.validation.SkuNotBlankValidator;
@@ -163,22 +163,14 @@ class ValidatingPartitionedReaderTest {
             bronzeFiles.put(IdempotencyKey.of(bronzeRecord.record().getNested("idempotencyKey").getString("value")), bronzeRecord);
         }
         PartitionedReader bronze = target -> List.copyOf(bronzeFiles.values()).stream();
-        BronzeRepository bronzeRepository = new BronzeRepository() {
-            @Override
-            public void save(PartitionKey partition, Envelope envelope) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public void delete(PartitionKey partition, IdempotencyKey idempotencyKey) {
-                if (failingDeletes.contains(idempotencyKey)) throw new BronzeRepositoryException("disk full", new IOException());
-                if (partition.equals(PARTITION)) bronzeFiles.remove(idempotencyKey);
-            }
+        BronzeEnvelopeRemover bronzeEnvelopeRemover = (partition, idempotencyKey) -> {
+            if (failingDeletes.contains(idempotencyKey)) throw new BronzeRemovalException("disk full", new IOException());
+            if (partition.equals(PARTITION)) bronzeFiles.remove(idempotencyKey);
         };
         return new ValidatingPartitionedReader(bronze,
                 new EnvelopeValidator(new ValidatorRegistry(List.of(new SkuNotBlankValidator(), new PositivePriceValidator()))),
                 repository,
-                bronzeRepository,
+                bronzeEnvelopeRemover,
                 new EventPublisher() {
                     @Override
                     public <E extends Event> void publish(E event) {
