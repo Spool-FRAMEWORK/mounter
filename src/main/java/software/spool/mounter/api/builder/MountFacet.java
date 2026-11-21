@@ -1,15 +1,15 @@
 package software.spool.mounter.api.builder;
 
 import software.spool.core.model.vo.PartitionKey;
+import software.spool.mounter.api.adapter.SameAsSourcePartitioning;
 import software.spool.mounter.api.port.*;
 import software.spool.mounter.internal.decorator.SafeDataMartWriter;
-import software.spool.mounter.internal.utils.RecordPartitionKeyExtractor;
 
 public class MountFacet<B> extends MounterFacet<B> {
     DataMartWriter writer;
     MountTarget target;
     PartitionKey scope;
-    PartitionKeyExtractor keyExtractor;
+    MountPartitioning<?> partitioning = new SameAsSourcePartitioning<>();
 
     MountFacet(B parent) { super(parent); }
 
@@ -28,13 +28,11 @@ public class MountFacet<B> extends MounterFacet<B> {
         return this;
     }
 
-    public <R> MountFacet<B> partitioningWith(MountPartitionSchema<R> schema) {
-        this.keyExtractor = new RecordPartitionKeyExtractor<>(schema);
-        return this;
-    }
-
-    public MountFacet<B> partitioningWith(PartitionKeyExtractor keyExtractor) {
-        this.keyExtractor = keyExtractor;
+    /**
+     * Sets how the partition each result is written to is decided. By default, the partition the result comes with.
+     */
+    public MountFacet<B> partitioningWith(MountPartitioning<?> partitioning) {
+        this.partitioning = partitioning;
         return this;
     }
 }

@@ -3,7 +3,6 @@ package software.spool.mounter.internal.control.steps;
 import org.junit.jupiter.api.Test;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.pipeline.PipelineContext;
-import software.spool.mounter.api.model.AggregatedRecord;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.IncrementalDataMartReader;
 import software.spool.mounter.api.port.MergeableMountAggregator;
@@ -73,7 +72,7 @@ class MergePartitionsStepTest {
             @Override public Stream<String> merge(String prev, Stream<PartitionedRecord<GenericRecord>> records) {
                 return Stream.of(prev == null ? "first" : prev + "+second");
             }
-            @Override public Stream<AggregatedRecord<String>> aggregate(Stream<PartitionedRecord<GenericRecord>> records) {
+            @Override public Stream<PartitionedRecord<String>> aggregate(Stream<PartitionedRecord<GenericRecord>> records) {
                 return Stream.empty();
             }
         };

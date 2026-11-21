@@ -6,7 +6,6 @@ import software.spool.core.pipeline.PipelineContext;
 import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.Mounter;
 import software.spool.mounter.api.adapter.SequentialPartitionDispatcher;
-import software.spool.mounter.api.port.PartitionKeyExtractor;
 import software.spool.mounter.api.port.scaling.PartitionDispatcher;
 import software.spool.mounter.api.port.scaling.PartitionInfo;
 import software.spool.mounter.api.port.scaling.ScalingPlan;
@@ -21,18 +20,12 @@ import java.util.List;
 import java.util.Objects;
 
 class ReactiveMounterAssembler {
-    @SuppressWarnings("unchecked")
     static <I, O> Mounter assemble(ReactiveMounterBuilder<I, O> b) {
         ErrorRouter router = Objects.requireNonNullElse(b.observability.errorRouter,
                 MounterErrorRouter.defaults(b.bus));
 
-        MountUnitHandler<O> unitHandler = new MountUnitHandler<>(
-                SafePartitionedReader.of(b.validation.readerFor(b.reader, b.mount.target, b.bus)),
-                SafeMountAggregator.of(b.aggregator),
-                SafeDataMartWriter.of(b.mount.writer),
-                b.checkpoint.windowPolicy, b.checkpoint.checkpoint,
-                (PartitionKeyExtractor<O>) b.mount.keyExtractor
-        );
+        MountUnitHandler<O> unitHandler = MountUnitHandlerAssembler.assemble(b.reader, b.aggregator, b.mount.target,
+                b.mount, b.checkpoint, b.validation, b.quarantine, b.bus, router);
 
         PartitionDispatcher seq = SafePartitionDispatcher.of(new SequentialPartitionDispatcher());
         Pipeline<PipelineContext, PipelineContext> pipeline = Pipeline.<PipelineContext>start()

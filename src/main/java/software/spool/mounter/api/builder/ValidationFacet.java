@@ -1,47 +1,28 @@
 package software.spool.mounter.api.builder;
 
-import software.spool.core.adapter.otel.OpenTelemetryMetricsRegistry;
-import software.spool.core.port.bus.EventPublisher;
-import software.spool.core.port.datalake.DataLakeEnvelopeRemover;
-import software.spool.core.port.metrics.MetricsRegistry;
-import software.spool.core.port.metrics.SpoolMetrics;
-import software.spool.core.port.quarantine.QuarantineRepository;
 import software.spool.mounter.api.MountMode;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedReader;
+import software.spool.mounter.internal.quarantine.DataLakeRecordQuarantine;
 import software.spool.mounter.internal.validation.ValidatingPartitionedReader;
 import software.spool.validator.api.EnvelopeValidator;
 import software.spool.validator.engine.ValidatorRegistry;
 
-import java.util.Objects;
 import java.util.Optional;
 
 /**
  * Validates on read what a {@code TRANSFORMATION} mount promotes from bronze to silver, with the validators of each
- * source, the same ones the ingester uses. Off until a quarantine is given with {@link #quarantineIn}; then the
- * bronze records it rejects are removed with the remover given in {@link #removingFromDataLakeWith}.
+ * source, the same ones the ingester uses. Off until {@link #enabled()}; the records it rejects go to the quarantine
+ * set in {@code quarantine()}.
  */
 public class ValidationFacet<B> extends MounterFacet<B> {
-    private QuarantineRepository quarantineRepository;
-    private DataLakeEnvelopeRemover dataLakeEnvelopeRemover;
+    private boolean enabled;
     private ValidatorRegistry registry;
 
     ValidationFacet(B parent) { super(parent); }
 
-    /**
-     * Turns validation on and sets where the records that fail a critical validator are kept.
-     */
-    public ValidationFacet<B> quarantineIn(QuarantineRepository quarantineRepository) {
-        this.quarantineRepository = quarantineRepository;
-        return this;
-    }
-
-    /**
-     * Sets where the rejected records are removed from, which must be the bronze layer the mount reads. Required when
-     * validation is on.
-     */
-    public ValidationFacet<B> removingFromDataLakeWith(DataLakeEnvelopeRemover dataLakeEnvelopeRemover) {
-        this.dataLakeEnvelopeRemover = dataLakeEnvelopeRemover;
+    public ValidationFacet<B> enabled() {
+        this.enabled = true;
         return this;
     }
 
@@ -53,20 +34,15 @@ public class ValidationFacet<B> extends MounterFacet<B> {
         return this;
     }
 
-    PartitionedReader readerFor(PartitionedReader reader, MountTarget target, EventPublisher publisher) {
-        if (quarantineRepository == null) return reader;
+    PartitionedReader readerFor(PartitionedReader reader, MountTarget target, Optional<DataLakeRecordQuarantine> quarantine) {
+        if (!enabled) return reader;
         if (target.mode() != MountMode.TRANSFORMATION) {
             throw new IllegalStateException("Validation on read only applies to TRANSFORMATION mounts, from bronze to silver; this mount is "
                     + target.mode());
         }
-        Objects.requireNonNull(publisher, "EventPublisher required to validate on read; set it with scheduling().emittingWith(...)");
-        Objects.requireNonNull(dataLakeEnvelopeRemover, "DataLakeEnvelopeRemover required to validate on read; set it with validation().removingFromDataLakeWith(...)");
-        MetricsRegistry metrics = new OpenTelemetryMetricsRegistry();
         return new ValidatingPartitionedReader(reader,
                 new EnvelopeValidator(Optional.ofNullable(registry).orElseGet(ValidatorRegistry::new)),
-                quarantineRepository,
-                dataLakeEnvelopeRemover,
-                publisher,
-                metrics.counter(SpoolMetrics.Validation.RECORDS_REJECTED_TOTAL, SpoolMetrics.Validation.RECORDS_REJECTED_TOTAL_DESC, "1"));
+                quarantine.orElseThrow(() -> new IllegalStateException(
+                        "Quarantine required to validate on read; set it with quarantine().in(...)")));
     }
 }

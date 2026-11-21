@@ -27,6 +27,7 @@ import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedReader;
 import software.spool.mounter.api.port.PartitionedRecord;
+import software.spool.mounter.internal.quarantine.DataLakeRecordQuarantine;
 import software.spool.validator.api.EnvelopeValidator;
 import software.spool.validator.engine.ValidatorRegistry;
 
@@ -169,15 +170,15 @@ class ValidatingPartitionedReaderTest {
         };
         return new ValidatingPartitionedReader(bronze,
                 new EnvelopeValidator(new ValidatorRegistry(List.of(new SkuNotBlankValidator(), new PositivePriceValidator()))),
-                repository,
-                dataLakeEnvelopeRemover,
-                new EventPublisher() {
-                    @Override
-                    public <E extends Event> void publish(E event) {
-                        published.add(event);
-                    }
-                },
-                (value, attributes) -> rejected.add(attributes));
+                new DataLakeRecordQuarantine(repository,
+                        dataLakeEnvelopeRemover,
+                        new EventPublisher() {
+                            @Override
+                            public <E extends Event> void publish(E event) {
+                                published.add(event);
+                            }
+                        },
+                        (value, attributes) -> rejected.add(attributes)));
     }
 
     private static PartitionedRecord<GenericRecord> bronze(String key, String payload) {

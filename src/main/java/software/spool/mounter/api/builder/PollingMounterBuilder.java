@@ -15,6 +15,7 @@ public class PollingMounterBuilder<T, R> {
     final ObservabilityFacet<PollingMounterBuilder<T, R>> observability;
     final ScalingFacet<PollingMounterBuilder<T, R>> scaling;
     final ValidationFacet<PollingMounterBuilder<T, R>> validation;
+    final QuarantineFacet<PollingMounterBuilder<T, R>> quarantine;
 
     public PollingMounterBuilder(PartitionedReader reader, ModuleHeartBeat heartBeat) {
         this.reader = reader;
@@ -25,6 +26,7 @@ public class PollingMounterBuilder<T, R> {
         this.observability = new ObservabilityFacet<>(this);
         this.scaling = new ScalingFacet<>(this);
         this.validation = new ValidationFacet<>(this);
+        this.quarantine = new QuarantineFacet<>(this);
     }
 
     public PollingMounterBuilder<T, R> aggregatingWith(MountAggregator<R> aggregator) {
@@ -38,6 +40,7 @@ public class PollingMounterBuilder<T, R> {
     public ObservabilityFacet<PollingMounterBuilder<T, R>> observability() { return observability; }
     public ScalingFacet<PollingMounterBuilder<T, R>> scaling() { return scaling; }
     public ValidationFacet<PollingMounterBuilder<T, R>> validation() { return validation; }
+    public QuarantineFacet<PollingMounterBuilder<T, R>> quarantine() { return quarantine; }
 
     public Mounter build() {
         return PollingMounterAssembler.assemble(this);

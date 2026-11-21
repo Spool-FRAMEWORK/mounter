@@ -16,6 +16,7 @@ public class ReactiveMounterBuilder<I, O> {
     final CheckpointFacet<ReactiveMounterBuilder<I, O>> checkpoint;
     final ObservabilityFacet<ReactiveMounterBuilder<I, O>> observability;
     final ValidationFacet<ReactiveMounterBuilder<I, O>> validation;
+    final QuarantineFacet<ReactiveMounterBuilder<I, O>> quarantine;
 
     public ReactiveMounterBuilder(EventBus bus, ModuleHeartBeat moduleHeartBeat) {
         this.bus = bus;
@@ -24,6 +25,7 @@ public class ReactiveMounterBuilder<I, O> {
         this.checkpoint = new CheckpointFacet<>(this);
         this.observability = new ObservabilityFacet<>(this);
         this.validation = new ValidationFacet<>(this);
+        this.quarantine = new QuarantineFacet<>(this);
     }
 
     public ReactiveMounterBuilder<I, O> aggregatingWith(MountAggregator<O> aggregator) {
@@ -40,6 +42,7 @@ public class ReactiveMounterBuilder<I, O> {
     public CheckpointFacet<ReactiveMounterBuilder<I, O>> checkpoint() { return checkpoint; }
     public ObservabilityFacet<ReactiveMounterBuilder<I, O>> observability() { return observability; }
     public ValidationFacet<ReactiveMounterBuilder<I, O>> validation() { return validation; }
+    public QuarantineFacet<ReactiveMounterBuilder<I, O>> quarantine() { return quarantine; }
 
     public Mounter build() {
         return ReactiveMounterAssembler.assemble(this);

@@ -7,7 +7,6 @@ import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.Mounter;
 import software.spool.mounter.api.adapter.SequentialPartitionDispatcher;
 import software.spool.mounter.api.port.MountTarget;
-import software.spool.mounter.api.port.PartitionKeyExtractor;
 import software.spool.mounter.api.port.scaling.*;
 import software.spool.mounter.api.strategy.MountStrategy;
 import software.spool.mounter.api.utils.MounterErrorRouter;
@@ -20,7 +19,6 @@ import java.util.List;
 import java.util.Objects;
 
 class PollingMounterAssembler {
-    @SuppressWarnings("unchecked")
     static <T, R> Mounter assemble(PollingMounterBuilder<T, R> b) {
         ErrorRouter router = Objects.requireNonNullElse(b.observability.errorRouter,
                 MounterErrorRouter.defaults(b.scheduling.publisher));
@@ -28,13 +26,8 @@ class PollingMounterAssembler {
                 ? b.mount.target.withSourceKey(b.mount.scope)
                 : b.mount.target;
 
-        MountUnitHandler<R> unitHandler = new MountUnitHandler<>(
-                SafePartitionedReader.of(b.validation.readerFor(b.reader, effectiveTarget, b.scheduling.publisher)),
-                SafeMountAggregator.of(b.aggregator),
-                SafeDataMartWriter.of(b.mount.writer),
-                b.checkpoint.windowPolicy, b.checkpoint.checkpoint,
-                (PartitionKeyExtractor<R>) b.mount.keyExtractor
-        );
+        MountUnitHandler<R> unitHandler = MountUnitHandlerAssembler.assemble(b.reader, b.aggregator, effectiveTarget,
+                b.mount, b.checkpoint, b.validation, b.quarantine, b.scheduling.publisher, router);
 
         PartitionDiscovery discovery = SafePartitionDiscovery.of(
                 Objects.requireNonNullElse(b.scaling.discovery, scope -> List.of(PartitionInfo.of(scope))));

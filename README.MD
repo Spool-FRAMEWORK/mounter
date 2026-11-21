@@ -75,7 +75,7 @@ Mounter mounter = MounterBuilderFactory.polling(reader)
         .mount()
             .writingWith(writer)
             .onTarget(MountTarget.transformation("orders-by-customer", rootKey))
-            .partitioningWith(schema)
+            .partitioningWith(partitioning)
             .and()
         .checkpoint()
             .windowPolicy(new AlwaysClosedWindowPolicy())
@@ -106,7 +106,7 @@ Mounter mounter = MounterBuilderFactory.polling(reader)
         .mount()
             .writingWith(writer)
             .onTarget(MountTarget.transformation("orders-by-customer", rootKey))
-            .partitioningWith(schema)
+            .partitioningWith(partitioning)
             .and()
         .checkpoint()
             .windowPolicy(new AlwaysClosedWindowPolicy())
@@ -132,7 +132,7 @@ Mounter mounter = MounterBuilderFactory.reactive(eventBus)
         .mount()
             .writingWith(writer)
             .onTarget(MountTarget.aggregation("orders-summary", rootKey))
-            .partitioningWith(schema)
+            .partitioningWith(partitioning)
             .and()
         .checkpoint()
             .windowPolicy(windowPolicy)
@@ -162,6 +162,34 @@ On each call: fetches new closed partitions → reads current state → merges �
 
 ---
 
+### Partitioning and Quarantine
+
+The aggregator returns each result as a `PartitionedRecord`, with its partition: `PassThroughMountAggregator` keeps the partition each record was read from, and an aggregator gives each result the partition of its group. `partitioningWith` decides where each result is written:
+
+- `SameAsSourcePartitioning` (the default) writes it in the partition it comes with.
+- `AttributesPartitioning.of("payload.country", "payload.day")` builds the partition from attributes of the result, a `GenericRecord` or a Java record. Each entry is named after the attribute path: `payload.country=ES::payload.day=2026-11-21`.
+
+A result that lacks one of those attributes is not written. In a `TRANSFORMATION` mount with a quarantine, the record goes to the quarantine with the missing attribute and is removed from the data lake. Otherwise, a `MissingPartitionAttributeException` naming the attribute reaches the `ErrorRouter`.
+
+The same quarantine keeps the records that fail validation on read:
+
+```java
+.mount()
+    .onTarget(MountTarget.transformation("payments", rootKey))
+    .writingWith(writer)
+    .partitioningWith(AttributesPartitioning.of("payload.country"))
+    .and()
+.quarantine()
+    .in(quarantineRepository)
+    .removingFromDataLakeWith(dataLakeEnvelopeRemover)
+    .and()
+.validation()
+    .enabled()
+    .and()
+```
+
+---
+
 ### Scoped Mounter
 
 Restrict the reader to a sub-partition with `.onScope()`:
@@ -171,7 +199,7 @@ Restrict the reader to a sub-partition with `.onScope()`:
     .onTarget(MountTarget.transformation("orders-by-customer", rootKey))
     .onScope(PartitionKey.of("tenant", "acme"))
     .writingWith(writer)
-    .partitioningWith(schema)
+    .partitioningWith(partitioning)
     .and()
 ```
 
@@ -187,7 +215,7 @@ Mounter mounter = MounterBuilderFactory.polling(reader)
         .mount()
             .writingWith(writer)
             .onTarget(target)
-            .partitioningWith(schema)
+            .partitioningWith(partitioning)
             .and()
         .checkpoint()
             .windowPolicy(windowPolicy)
@@ -221,7 +249,8 @@ Mounter mounter = MounterBuilderFactory.polling(reader)
 |---|---|
 | **`PartitionedReader`** | Reads raw records from a source partition. |
 | **`DataMartWriter`** | Writes aggregated results to the target store. |
-| **`MountAggregator<R>`** | Transforms a stream of records into a typed result `R`. |
+| **`MountAggregator<R>`** | Transforms a stream of records into typed results `R`, each with its partition. |
+| **`MountPartitioning<R>`** | Decides the partition each result is written to, looking only at the result. |
 | **`MountTarget`** | Identifies the output data mart and source partition. Factory methods: `transformation()`, `aggregation()`. |
 | **`PartitionWindowPolicy`** | Decides whether a partition is closed and ready to process. |
 | **`MountCheckpoint`** | Tracks which partitions have already been mounted. |
@@ -236,7 +265,9 @@ Mounter mounter = MounterBuilderFactory.polling(reader)
 | `AlwaysClosedWindowPolicy` | Treats every partition as closed — suitable for non-windowed sources or tests. |
 | `NoOpMountCheckpoint` | Never records a mounted partition — re-mounts everything on each run. |
 | `NoOpMountCursor` | Reports no processed sources — processes all partitions on each run. |
-| `PassThroughMountAggregator` | Emits each record unchanged as the aggregation result. |
+| `PassThroughMountAggregator` | Emits each record unchanged, with the partition it was read from. |
+| `SameAsSourcePartitioning` | Writes each result in the partition it comes with. |
+| `AttributesPartitioning` | Builds the partition from attributes of the result. |
 | `ThresholdScalingPolicy` | Selects sequential / local parallel / distributed based on thresholds. |
 | `SequentialPartitionDispatcher` | Processes mount units one at a time in the calling thread. |
 | `ThreadPoolPartitionDispatcher` | Processes mount units in parallel using a provided `Executor`. |
