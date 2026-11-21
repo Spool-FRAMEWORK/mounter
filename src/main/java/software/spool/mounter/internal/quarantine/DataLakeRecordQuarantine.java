@@ -84,6 +84,7 @@ public class DataLakeRecordQuarantine {
     }
 
     private static String encoded(Object decodedPayload) {
-        return Base64.getEncoder().encodeToString(RecordSerializerFactory.record().serialize(decodedPayload));
+        byte[] bytes = decodedPayload instanceof byte[] raw ? raw : RecordSerializerFactory.record().serialize(decodedPayload);
+        return Base64.getEncoder().encodeToString(bytes);
     }
 }
