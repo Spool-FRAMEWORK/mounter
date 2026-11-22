@@ -1,9 +1,11 @@
 package software.spool.mounter.internal.quarantine;
 
 import software.spool.core.exception.DeserializationException;
+import software.spool.core.model.quarantine.QuarantineReason;
 import software.spool.core.model.vo.Envelope;
 import software.spool.mounter.api.exception.MissingPartitionAttributeException;
 import software.spool.mounter.api.model.GenericRecord;
+import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedRecord;
 import software.spool.mounter.internal.control.steps.MissingPartitionAttributeHandler;
 
@@ -24,10 +26,11 @@ public class QuarantiningMissingPartitionAttributeHandler implements MissingPart
     }
 
     @Override
-    public void handle(PartitionedRecord<?> result, MissingPartitionAttributeException exception) {
+    public void handle(MountTarget target, PartitionedRecord<?> result, MissingPartitionAttributeException exception) {
         envelopeOf(result).ifPresentOrElse(
-                envelope -> quarantine.quarantine(envelope, result.partitionKey(), List.of(exception.getMessage())),
-                () -> fallback.handle(result, exception));
+                envelope -> quarantine.quarantine(envelope, result.partitionKey(), QuarantineReason.MISSING_PARTITION_ATTRIBUTE,
+                        List.of(exception.getMessage())),
+                () -> fallback.handle(target, result, exception));
     }
 
     private static Optional<Envelope> envelopeOf(PartitionedRecord<?> result) {

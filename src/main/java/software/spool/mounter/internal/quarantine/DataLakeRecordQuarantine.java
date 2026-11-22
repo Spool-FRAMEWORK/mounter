@@ -14,7 +14,6 @@ import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.datalake.DataLakeEnvelopeRemover;
 import software.spool.core.port.logging.Logger;
 import software.spool.core.port.metrics.MetricsRegistry;
-import software.spool.core.port.metrics.SpoolMetrics;
 import software.spool.core.port.quarantine.QuarantineRepository;
 import software.spool.core.utils.quarantine.QuarantineRecorder;
 import software.spool.mounter.api.model.GenericRecord;
@@ -36,8 +35,6 @@ import java.util.Map;
 public class DataLakeRecordQuarantine {
     private static final Logger LOG = LoggerFactory.getLogger(DataLakeRecordQuarantine.class);
     private static final String PAYLOAD = "payload";
-    private static final Map<String, String> REJECTED_ATTRIBUTES =
-            Map.of(SpoolMetrics.Attributes.REASON, "invalid", SpoolMetrics.Attributes.MODULE, "mounter");
 
     private final QuarantineRecorder recorder;
     private final DataLakeEnvelopeRemover dataLakeEnvelopeRemover;
@@ -59,18 +56,18 @@ public class DataLakeRecordQuarantine {
                 .deserialize(RecordSerializerFactory.record().serialize(fields));
     }
 
-    public void quarantine(Envelope envelope, PartitionKey partition, List<String> violations) {
+    public void quarantine(Envelope envelope, PartitionKey partition, QuarantineReason reason, List<String> violations) {
         QuarantineLocation location = QuarantineLocation.bronze(partition);
-        recorder.record(envelope, location, QuarantineReason.VALIDATION_FAILED, violations, Instant.now());
+        recorder.record(envelope, location, reason, violations, Instant.now());
         removeFromDataLake(envelope, partition);
         publisher.publish(EnvelopeQuarantined.builder()
                 .correlationId(envelope.metadata().get(EventMetadataKey.CORRELATION_ID))
                 .idempotencyKey(envelope.idempotencyKey())
-                .reason(QuarantineReason.VALIDATION_FAILED)
+                .reason(reason)
                 .violations(violations)
                 .location(location)
                 .build());
-        recordsRejected.add(1, REJECTED_ATTRIBUTES);
+        recordsRejected.add(1, RejectionMetricAttributes.of(reason));
         LOG.warn("Kept {} out of silver and sent it to quarantine: {}", envelope.idempotencyKey().value(), violations);
     }
 

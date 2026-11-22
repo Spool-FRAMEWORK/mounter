@@ -1,5 +1,6 @@
 package software.spool.mounter.internal.validation;
 
+import software.spool.core.model.quarantine.QuarantineReason;
 import software.spool.core.model.vo.Envelope;
 import software.spool.mounter.api.MountMode;
 import software.spool.mounter.api.model.GenericRecord;
@@ -42,7 +43,7 @@ public class ValidatingPartitionedReader implements PartitionedReader {
         Envelope envelope = DataLakeRecordQuarantine.envelopeOf(partitionedRecord.record());
         ValidationResult result = validator.validate(envelope);
         if (!result.isQuarantine()) return true;
-        quarantine.quarantine(envelope, partitionedRecord.partitionKey(),
+        quarantine.quarantine(envelope, partitionedRecord.partitionKey(), QuarantineReason.VALIDATION_FAILED,
                 result.getViolations().stream().map(Throwable::getMessage).toList());
         return false;
     }

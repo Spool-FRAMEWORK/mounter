@@ -31,7 +31,7 @@ public class MountUnitHandler<O> implements Handler<MountTarget> {
     @Override
     public void handle(MountTarget target) throws SpoolException {
         if (shouldSkip(target)) return;
-        writer.write(target, aggregator.aggregate(reader.read(target)).flatMap(this::inTargetPartition));
+        writer.write(target, aggregator.aggregate(reader.read(target)).flatMap(result -> inTargetPartition(target, result)));
         checkpoint.markMounted(target);
     }
 
@@ -39,11 +39,11 @@ public class MountUnitHandler<O> implements Handler<MountTarget> {
         return !windowPolicy.isClosed(target.sourceKey()) || checkpoint.isMounted(target);
     }
 
-    private Stream<PartitionedRecord<?>> inTargetPartition(PartitionedRecord<O> result) {
+    private Stream<PartitionedRecord<?>> inTargetPartition(MountTarget target, PartitionedRecord<O> result) {
         try {
             return Stream.of(new PartitionedRecord<>(partitioning.of(result), result.record()));
         } catch (MissingPartitionAttributeException e) {
-            missingAttributeHandler.handle(result, e);
+            missingAttributeHandler.handle(target, result, e);
             return Stream.empty();
         }
     }

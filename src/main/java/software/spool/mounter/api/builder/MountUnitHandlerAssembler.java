@@ -14,7 +14,9 @@ import software.spool.mounter.internal.decorator.SafeDataMartWriter;
 import software.spool.mounter.internal.decorator.SafeMountAggregator;
 import software.spool.mounter.internal.decorator.SafePartitionedReader;
 import software.spool.mounter.internal.quarantine.DataLakeRecordQuarantine;
+import software.spool.mounter.internal.quarantine.MountResultQuarantine;
 import software.spool.mounter.internal.quarantine.QuarantiningMissingPartitionAttributeHandler;
+import software.spool.mounter.internal.quarantine.QuarantiningMountResultHandler;
 
 import java.util.Optional;
 
@@ -26,22 +28,26 @@ class MountUnitHandlerAssembler {
     static <O> MountUnitHandler<O> assemble(PartitionedReader reader, MountAggregator<O> aggregator, MountTarget target,
                                             MountFacet<?> mount, CheckpointFacet<?> checkpoint, ValidationFacet<?> validation,
                                             QuarantineFacet<?> quarantine, EventPublisher publisher, ErrorRouter router) {
-        Optional<DataLakeRecordQuarantine> recordQuarantine = quarantine.quarantineFor(publisher);
+        Optional<DataLakeRecordQuarantine> recordQuarantine = target.mode() == MountMode.TRANSFORMATION
+                ? quarantine.dataLakeQuarantineFor(publisher)
+                : Optional.empty();
         return new MountUnitHandler<>(
                 SafePartitionedReader.of(validation.readerFor(reader, target, recordQuarantine)),
                 SafeMountAggregator.of(aggregator),
                 SafeDataMartWriter.of(mount.writer),
                 checkpoint.windowPolicy, checkpoint.checkpoint,
                 (MountPartitioning<? super O>) mount.partitioning,
-                missingAttributeHandler(target, recordQuarantine, router));
+                missingAttributeHandler(recordQuarantine, quarantine.resultQuarantineFor(publisher), router));
     }
 
-    private static MissingPartitionAttributeHandler missingAttributeHandler(MountTarget target,
-                                                                            Optional<DataLakeRecordQuarantine> recordQuarantine,
+    private static MissingPartitionAttributeHandler missingAttributeHandler(Optional<DataLakeRecordQuarantine> recordQuarantine,
+                                                                            Optional<MountResultQuarantine> resultQuarantine,
                                                                             ErrorRouter router) {
-        MissingPartitionAttributeHandler routing = new RoutingMissingPartitionAttributeHandler(router);
-        return recordQuarantine.filter(present -> target.mode() == MountMode.TRANSFORMATION)
-                .<MissingPartitionAttributeHandler>map(present -> new QuarantiningMissingPartitionAttributeHandler(present, routing))
-                .orElse(routing);
+        MissingPartitionAttributeHandler forResults = resultQuarantine
+                .<MissingPartitionAttributeHandler>map(QuarantiningMountResultHandler::new)
+                .orElseGet(() -> new RoutingMissingPartitionAttributeHandler(router));
+        return recordQuarantine
+                .<MissingPartitionAttributeHandler>map(present -> new QuarantiningMissingPartitionAttributeHandler(present, forResults))
+                .orElse(forResults);
     }
 }

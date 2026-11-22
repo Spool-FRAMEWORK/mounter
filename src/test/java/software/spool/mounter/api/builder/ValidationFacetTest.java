@@ -51,10 +51,10 @@ class ValidationFacetTest {
     }
 
     @Test
-    void quarantineFor_withoutDataLakeEnvelopeRemover_failsWithAClearMessage() {
+    void dataLakeQuarantineFor_withoutDataLakeEnvelopeRemover_failsWithAClearMessage() {
         QuarantineFacet<Object> quarantine = new QuarantineFacet<>(new Object()).in(new InMemoryQuarantineRepository());
 
-        assertThatThrownBy(() -> quarantine.quarantineFor(mock(EventPublisher.class)))
+        assertThatThrownBy(() -> quarantine.dataLakeQuarantineFor(mock(EventPublisher.class)))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("DataLakeEnvelopeRemover required to quarantine records; set it with quarantine().removingFromDataLakeWith(...)");
     }
@@ -101,6 +101,6 @@ class ValidationFacetTest {
 
     private static Optional<DataLakeRecordQuarantine> quarantine() {
         return new QuarantineFacet<>(new Object()).in(new InMemoryQuarantineRepository())
-                .removingFromDataLakeWith(new InMemoryDataLake()).quarantineFor(mock(EventPublisher.class));
+                .removingFromDataLakeWith(new InMemoryDataLake()).dataLakeQuarantineFor(mock(EventPublisher.class));
     }
 }

@@ -18,13 +18,11 @@ import software.spool.core.model.vo.MediaType;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.datalake.DataLakeEnvelopeRemover;
-import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.adapter.AlwaysClosedWindowPolicy;
 import software.spool.mounter.api.adapter.AttributesPartitioning;
 import software.spool.mounter.api.adapter.NoOpMountCheckpoint;
 import software.spool.mounter.api.adapter.PassThroughMountAggregator;
 import software.spool.mounter.api.adapter.SameAsSourcePartitioning;
-import software.spool.mounter.api.exception.MissingPartitionAttributeException;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.MountAggregator;
 import software.spool.mounter.api.port.MountPartitioning;
@@ -32,7 +30,9 @@ import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedReader;
 import software.spool.mounter.api.port.PartitionedRecord;
 import software.spool.mounter.internal.quarantine.DataLakeRecordQuarantine;
+import software.spool.mounter.internal.quarantine.MountResultQuarantine;
 import software.spool.mounter.internal.quarantine.QuarantiningMissingPartitionAttributeHandler;
+import software.spool.mounter.internal.quarantine.QuarantiningMountResultHandler;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -59,8 +59,6 @@ class MountUnitHandlerTest {
     private final List<PartitionedRecord<?>> written = new ArrayList<>();
     private final InMemoryQuarantineRepository quarantineRepository = new InMemoryQuarantineRepository();
     private final List<Event> published = new ArrayList<>();
-    private final List<Exception> routed = new ArrayList<>();
-    private final ErrorRouter errorRouter = new ErrorRouter().orElse((exception, context) -> routed.add(exception));
 
     @Test
     void handle_withoutAggregator_writesEachRecordInThePartitionItWasReadFrom() {
@@ -103,10 +101,9 @@ class MountUnitHandlerTest {
 
         assertThat(writtenPartitionsByKey()).containsOnlyKeys("k1");
         QuarantinedRecord quarantined = quarantineRepository.find(IdempotencyKey.of("k2")).orElseThrow();
-        assertThat(quarantined.reason()).isEqualTo(QuarantineReason.VALIDATION_FAILED);
+        assertThat(quarantined.reason()).isEqualTo(QuarantineReason.MISSING_PARTITION_ATTRIBUTE);
         assertThat(quarantined.violations()).anyMatch(violation -> violation.contains("payload.country"));
         assertThat(quarantined.location()).isEqualTo(QuarantineLocation.bronze(FIRST_PARTITION));
-        assertThat(routed).isEmpty();
     }
 
     @Test
@@ -118,25 +115,27 @@ class MountUnitHandlerTest {
         assertThat(bronzeFiles.keySet()).containsExactly(IdempotencyKey.of("k1"));
         assertThat(published).singleElement().isInstanceOfSatisfying(EnvelopeQuarantined.class, event -> {
             assertThat(event.idempotencyKey()).isEqualTo(IdempotencyKey.of("k2"));
-            assertThat(event.reason()).isEqualTo(QuarantineReason.VALIDATION_FAILED);
+            assertThat(event.reason()).isEqualTo(QuarantineReason.MISSING_PARTITION_ATTRIBUTE);
         });
     }
 
     @Test
-    void handle_silverResultThatIsNoLongerTheEnvelopeAndLacksAPartitionAttribute_routesItsErrorAndLeavesItInTheDataLake() {
+    void handle_silverResultThatIsNoLongerTheEnvelopeAndLacksAPartitionAttribute_quarantinesItInItsDataMartAndLeavesBronzeAlone() {
         stored(bronze(FIRST_PARTITION, "k1", "{\"country\":\"ES\"}"));
         MountAggregator<DailyTotal> transformed = records -> records.map(read -> new PartitionedRecord<>(read.partitionKey(), new DailyTotal(null, 1)));
 
         handlerWith(transformed, AttributesPartitioning.of("day")).handle(SILVER);
 
         assertThat(written).isEmpty();
-        assertThat(routed).singleElement().isInstanceOf(MissingPartitionAttributeException.class);
-        assertThat(quarantineRepository.findAll()).isEmpty();
+        assertThat(quarantineRepository.findAll()).singleElement().satisfies(quarantined -> {
+            assertThat(quarantined.location()).isEqualTo(QuarantineLocation.dataMart("silver/payments", FIRST_PARTITION));
+            assertThat(quarantined.reason()).isEqualTo(QuarantineReason.MISSING_PARTITION_ATTRIBUTE);
+        });
         assertThat(bronzeFiles.keySet()).containsExactly(IdempotencyKey.of("k1"));
     }
 
     @Test
-    void handle_goldResultWithoutAPartitionAttribute_writesTheOthersAndRoutesItsErrorNamingTheAttribute() {
+    void handle_goldResultWithoutAPartitionAttribute_writesTheOthersAndQuarantinesItAsJsonNamingTheAttribute() {
         stored(bronze(FIRST_PARTITION, "k1", "{\"country\":\"ES\"}"));
         MountAggregator<DailyTotal> dailyTotals = records -> Stream.of(
                 new PartitionedRecord<>(SCOPE, new DailyTotal("2026-11-21", 1)),
@@ -145,9 +144,15 @@ class MountUnitHandlerTest {
         handlerWith(dailyTotals, AttributesPartitioning.of("day")).handle(GOLD);
 
         assertThat(written).singleElement().satisfies(result -> assertThat(result.record()).isEqualTo(new DailyTotal("2026-11-21", 1)));
-        assertThat(routed).singleElement().isInstanceOfSatisfying(MissingPartitionAttributeException.class,
-                exception -> assertThat(exception.attribute()).isEqualTo("day"));
-        assertThat(quarantineRepository.findAll()).isEmpty();
+        QuarantinedRecord quarantined = quarantineRepository.findAll().iterator().next();
+        assertThat(quarantined.location()).isEqualTo(QuarantineLocation.dataMart("gold/daily-totals", SCOPE));
+        assertThat(quarantined.violations()).anyMatch(violation -> violation.contains("day"));
+        assertThat(PayloadDeserializerFactory.json().asMap().deserialize(quarantined.envelope().payload()))
+                .containsEntry("cents", 1);
+        assertThat(quarantined.idempotencyKey())
+                .isEqualTo(IdempotencyKey.of("gold/daily-totals", quarantined.envelope().payload()));
+        assertThat(published).singleElement().isInstanceOfSatisfying(EnvelopeQuarantined.class,
+                event -> assertThat(event.location()).isEqualTo(quarantined.location()));
     }
 
     private <O> MountUnitHandler<O> handlerWith(MountAggregator<O> aggregator, MountPartitioning<? super O> partitioning) {
@@ -161,11 +166,11 @@ class MountUnitHandlerTest {
                 published.add(event);
             }
         };
-        RoutingMissingPartitionAttributeHandler routing = new RoutingMissingPartitionAttributeHandler(errorRouter);
         DataLakeRecordQuarantine quarantine = new DataLakeRecordQuarantine(quarantineRepository, remover, publisher, (value, attributes) -> {});
+        MountResultQuarantine resultQuarantine = new MountResultQuarantine(quarantineRepository, publisher, (value, attributes) -> {});
         return new MountUnitHandler<>(reader, aggregator, (target, results) -> results.forEach(written::add),
                 new AlwaysClosedWindowPolicy(), new NoOpMountCheckpoint(), partitioning,
-                new QuarantiningMissingPartitionAttributeHandler(quarantine, routing));
+                new QuarantiningMissingPartitionAttributeHandler(quarantine, new QuarantiningMountResultHandler(resultQuarantine)));
     }
 
     private Map<String, PartitionKey> writtenPartitionsByKey() {
