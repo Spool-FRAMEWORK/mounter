@@ -10,8 +10,18 @@ public class MountFacet<B> extends MounterFacet<B> {
     MountTarget target;
     PartitionKey scope;
     MountPartitioning<?> partitioning = new SameAsSourcePartitioning<>();
+    DataMartRemover remover;
 
     MountFacet(B parent) { super(parent); }
+
+    /**
+     * Sets how a result written before is removed from the data mart, which an incremental mount needs to replace the
+     * result of an aggregate that changes.
+     */
+    public MountFacet<B> removingWith(DataMartRemover remover) {
+        this.remover = remover;
+        return this;
+    }
 
     public MountFacet<B> writingWith(DataMartWriter writer) {
         this.writer = SafeDataMartWriter.of(writer);
