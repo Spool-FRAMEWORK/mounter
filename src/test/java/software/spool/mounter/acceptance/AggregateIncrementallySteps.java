@@ -92,7 +92,12 @@ public class AggregateIncrementallySteps {
     private Duration closingMargin = Duration.ZERO;
     private IncrementalMountAggregator<?, GenericRecord> aggregator;
     private int failingWrites;
+    private final MountRound mountRound;
     private Runnable round;
+
+    public AggregateIncrementallySteps(MountRound mountRound) {
+        this.mountRound = mountRound;
+    }
 
     @Given("aggregate metadata in memory")
     public void aggregateMetadataInMemory() {
@@ -125,11 +130,13 @@ public class AggregateIncrementallySteps {
     @Given("the mounter totals the amount of each country")
     public void theMounterTotalsTheAmountOfEachCountry() {
         aggregator = new TotalByCountry();
+        mountRound.runWith(this::theMounterMounts);
     }
 
     @Given("the mounter averages the amount of each country")
     public void theMounterAveragesTheAmountOfEachCountry() {
         aggregator = new AverageByCountry();
+        mountRound.runWith(this::theMounterMounts);
     }
 
     @Given("gold fails to write once")
@@ -138,7 +145,6 @@ public class AggregateIncrementallySteps {
     }
 
     @Given("the mounter has mounted once")
-    @When("the mounter mounts")
     @When("the mounter mounts again")
     public void theMounterMounts() {
         if (round == null) start();
