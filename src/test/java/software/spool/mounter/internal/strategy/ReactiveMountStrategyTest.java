@@ -41,6 +41,15 @@ class ReactiveMountStrategyTest {
         assertThat(mounted).isEmpty();
     }
 
+    @Test
+    void execute_aggregation_doesNotMountWhenASourceWhoseNameOnlyStartsTheSameIsMounted() {
+        started(MountTarget.aggregation("pay-total", new PartitionKey("source=pay")));
+
+        bus.publish(EnvelopesMounted.builder().dataMart("silver/payments").partitionKey(SOURCE).build());
+
+        assertThat(mounted).isEmpty();
+    }
+
     private CancellationToken started(MountTarget target) {
         CancellationToken token = CancellationToken.create();
         new ReactiveMountStrategy(target, bus, mounted::add, new ErrorRouter()).execute(token);
