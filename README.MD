@@ -145,20 +145,39 @@ Mounter mounter = MounterBuilderFactory.reactive(eventBus)
 
 ### Incremental Mounter
 
-For delta/merge use cases — maintains running state and only processes new partitions.
+An `AGGREGATION` mount can add new records to what it aggregated before instead of reading silver whole in each round ([ADR-027](https://linear.app/javier-castilla/document/adr-027-el-mounter-agrega-de-forma-incremental-con-un-agregador-que-c8a5f0f44866)). Its aggregator is an `IncrementalMountAggregator`: a fold with a state of its own, kept as JSON, so the state type must be one Jackson can write and read back, such as a record.
 
 ```java
-Pipeline<PipelineContext, PipelineContext> pipeline = Pipeline.<PipelineContext>start()
-        .add(new FetchPendingPartitionsStep(reader, windowPolicy, cursor))
-        .add(new ReadCurrentStateStep<>(reader))
-        .add(new MergePartitionsStep<>(reader, aggregator))
-        .add(new WriteIncrementalResultStep<>(writer))
-        .add(new AdvanceCursorStep(cursor));
+public class AverageAmount implements IncrementalMountAggregator<AverageAmount.State, Average> {
+    public record State(String country, long sum, long count) {}
 
-IncrementalMountHandler<Input, Output> handler = new IncrementalMountHandler<>(pipeline);
+    public PartitionKey groupOf(PartitionedRecord<GenericRecord> record) {
+        return PartitionKey.ofEntriesWithoutDate().with("country", record.record().getString("country")).build();
+    }
+    public State initial() { return new State("", 0, 0); }
+    public State add(State state, GenericRecord record) {
+        return new State(record.getString("country"), state.sum() + record.getLong("amount"), state.count() + 1);
+    }
+    public Average result(State state) { return new Average(state.country(), (double) state.sum() / state.count()); }
+    public Class<State> stateType() { return State.class; }
+}
+
+Mounter mounter = MounterBuilderFactory.<Object, Average>polling(reader)
+        .aggregatingWith(new AverageAmount())
+        .mount()
+            .onTarget(MountTarget.aggregation("average-by-country", new PartitionKey("source=payments")))
+            .writingWith(writer)
+            .removingWith(remover)
+            .and()
+        .checkpoint()
+            .aggregatingIncrementally(aggregateMetadataRepository, partitionDiscovery)
+            .and()
+        .build();
 ```
 
-On each call: fetches new closed partitions → reads current state → merges → writes → advances the cursor.
+Each round lists the partitions of the scope with the `PartitionDiscovery` and reads only the closed ones the data mart has not consumed. A partition is closed when its last date entry has ended and a margin has passed: `CheckpointFacet.DEFAULT_CLOSING_MARGIN` (15 minutes) unless `windowPolicy(...)` sets another, such as `new DatedPartitionWindowPolicy(clock, Duration.ofHours(1))`. Records that reach a partition after it closes do not reach gold. A scope with a partition without a date is aggregated again in full in every round.
+
+The `AggregateMetadataRepository` keeps, for each aggregate, the partitions of silver it comes from, how many records it has added, when it changed and the state of its aggregator. The result of an aggregate that changes replaces its previous result, which the `DataMartRemover` removes, so the data mart has a single result per aggregate. The metadata is saved before anything is published, and a result that fails to be published is published in the next round.
 
 ---
 
@@ -264,7 +283,8 @@ Mounter mounter = MounterBuilderFactory.polling(reader)
 |---|---|
 | `AlwaysClosedWindowPolicy` | Treats every partition as closed — suitable for non-windowed sources or tests. |
 | `NoOpMountCheckpoint` | Never records a mounted partition — re-mounts everything on each run. |
-| `NoOpMountCursor` | Reports no processed sources — processes all partitions on each run. |
+| `DatedPartitionWindowPolicy` | Closes a partition once its last date entry has ended and a margin has passed. |
+| `InMemoryAggregateMetadataRepository` | Keeps the metadata of the aggregates in memory, for tests. |
 | `PassThroughMountAggregator` | Emits each record unchanged, with the partition it was read from. |
 | `SameAsSourcePartitioning` | Writes each result in the partition it comes with. |
 | `AttributesPartitioning` | Builds the partition from attributes of the result. |
