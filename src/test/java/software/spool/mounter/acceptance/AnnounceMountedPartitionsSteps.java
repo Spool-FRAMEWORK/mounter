@@ -9,6 +9,7 @@ import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.adapter.memory.InMemoryEventBus;
 import software.spool.core.adapter.memory.InMemoryQuarantineRepository;
+import software.spool.core.exception.QuarantinedResultRejectedException;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.event.EnvelopePersisted;
 import software.spool.core.model.event.EnvelopesMounted;
@@ -25,6 +26,7 @@ import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.adapter.AlwaysClosedWindowPolicy;
 import software.spool.mounter.api.adapter.AttributesPartitioning;
 import software.spool.mounter.api.adapter.NoOpMountCheckpoint;
+import software.spool.mounter.api.adapter.PartitioningQuarantinedResultWriter;
 import software.spool.mounter.api.adapter.PassThroughMountAggregator;
 import software.spool.mounter.api.builder.MounterBuilderFactory;
 import software.spool.mounter.api.builder.PollingMounterBuilder;
@@ -34,6 +36,7 @@ import software.spool.mounter.api.port.MountAggregator;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedRecord;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -56,6 +59,8 @@ public class AnnounceMountedPartitionsSteps {
     private final List<EnvelopesMounted> announced = new ArrayList<>();
     private InMemoryEventBus bus;
     private boolean silverFails;
+    private PartitioningQuarantinedResultWriter quarantinedResults;
+    private RuntimeException takenOutFailure;
     private final MountRound mountRound;
     private Runnable round;
 
@@ -102,6 +107,8 @@ public class AnnounceMountedPartitionsSteps {
                 .emittingWith(bus);
         builder.build().start(mock(SpoolNode.StartPermit.class));
         mountRound.runWith(() -> round.run());
+        quarantinedResults = new PartitioningQuarantinedResultWriter(MountTarget.transformation(dataMart, BRONZE),
+                AttributesPartitioning.of(ATTRIBUTE_PREFIX + attribute), this::write, bus);
     }
 
     @Given("silver cannot be written")
@@ -142,6 +149,28 @@ public class AnnounceMountedPartitionsSteps {
                 .partitionKey(partitionOf(partition)).build());
     }
 
+    @When("the payment {string} of the country {string} is taken out of the quarantine")
+    public void thePaymentOfTheCountryIsTakenOutOfTheQuarantine(String id, String country) {
+        takeOutOfTheQuarantine("{\"id\":\"" + id + "\",\"payload\":{\"country\":\"" + country + "\"}}");
+    }
+
+    @When("the payment {string} without a country is taken out of the quarantine")
+    public void thePaymentWithoutACountryIsTakenOutOfTheQuarantine(String id) {
+        takeOutOfTheQuarantine("{\"id\":\"" + id + "\",\"payload\":{}}");
+    }
+
+    @Then("the payment {string} is rejected again")
+    public void thePaymentIsRejectedAgain(String id) {
+        assertThat(takenOutFailure).isInstanceOf(QuarantinedResultRejectedException.class);
+        assertThat(writtenIds()).doesNotContain(id);
+    }
+
+    @Then("the payment {string} is not written")
+    public void thePaymentIsNotWritten(String id) {
+        assertThat(takenOutFailure).isNotNull();
+        assertThat(writtenIds()).doesNotContain(id);
+    }
+
     @Then("the partition {string} of {string} is announced as mounted once")
     public void thePartitionIsAnnouncedAsMountedOnce(String partition, String dataMart) {
         assertThat(announced).filteredOn(event -> event.dataMart().equals(dataMart)
@@ -168,6 +197,19 @@ public class AnnounceMountedPartitionsSteps {
     @Then("gold has nothing in {string}")
     public void goldHasNothingIn(String dataMart) {
         assertThat(written.getOrDefault("gold/" + dataMart, List.of())).isEmpty();
+    }
+
+    private void takeOutOfTheQuarantine(String result) {
+        try {
+            quarantinedResults.write(BRONZE, result.getBytes(StandardCharsets.UTF_8));
+        } catch (RuntimeException e) {
+            takenOutFailure = e;
+        }
+    }
+
+    private List<Object> writtenIds() {
+        return written.values().stream().flatMap(List::stream)
+                .map(result -> ((GenericRecord) result.record()).toMap().get("id")).toList();
     }
 
     private void write(MountTarget target, Stream<PartitionedRecord<?>> results) {

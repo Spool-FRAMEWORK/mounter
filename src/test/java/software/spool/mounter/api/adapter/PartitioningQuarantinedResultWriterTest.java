@@ -1,6 +1,7 @@
 package software.spool.mounter.api.adapter;
 
 import org.junit.jupiter.api.Test;
+import software.spool.core.adapter.memory.InMemoryEventBus;
 import software.spool.core.exception.QuarantinedResultRejectedException;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.mounter.api.model.GenericRecord;
@@ -56,7 +57,8 @@ class PartitioningQuarantinedResultWriterTest {
     }
 
     private PartitioningQuarantinedResultWriter writerPartitionedBy(MountPartitioning<?> partitioning) {
-        return new PartitioningQuarantinedResultWriter(GOLD, partitioning, (target, results) -> results.forEach(written::add));
+        return new PartitioningQuarantinedResultWriter(GOLD, partitioning, (target, results) -> results.forEach(written::add),
+                new InMemoryEventBus());
     }
 
     private static byte[] json(String content) {

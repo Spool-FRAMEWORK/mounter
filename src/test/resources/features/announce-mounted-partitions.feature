@@ -68,3 +68,25 @@ Feature: A mounter announces each partition it writes, and a reactive mounter of
       | the partition "source=refunds" of "silver/refunds" is announced as mounted        |
       | the partition "source=payments" of "gold/payments-by-day" is announced as mounted |
       | an envelope of "source=payments" is persisted in bronze                            |
+
+  @DEV-132
+  Scenario: A result taken out of the quarantine is announced in the partition it is written to
+    Given a mounter that copies each payment to the silver data mart "payments" partitioned by "country"
+    When the payment "payment-2" of the country "ES" is taken out of the quarantine
+    Then the partition "country=ES" of "silver/payments" is announced as mounted once
+    And nothing else is announced as mounted
+
+  @DEV-132
+  Scenario: A result taken out of the quarantine that still cannot be written announces nothing
+    Given a mounter that copies each payment to the silver data mart "payments" partitioned by "country"
+    When the payment "payment-2" without a country is taken out of the quarantine
+    Then the payment "payment-2" is rejected again
+    And no partition is announced as mounted
+
+  @DEV-132
+  Scenario: A result taken out of the quarantine announces nothing when its data mart cannot be written
+    Given a mounter that copies each payment to the silver data mart "payments" partitioned by "country"
+    And silver cannot be written
+    When the payment "payment-2" of the country "ES" is taken out of the quarantine
+    Then the payment "payment-2" is not written
+    And no partition is announced as mounted

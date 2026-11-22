@@ -2,7 +2,9 @@ package software.spool.mounter.api.adapter;
 
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.exception.QuarantinedResultRejectedException;
+import software.spool.core.model.event.EnvelopesMounted;
 import software.spool.core.model.vo.PartitionKey;
+import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.quarantine.QuarantinedResultWriter;
 import software.spool.mounter.api.exception.MissingPartitionAttributeException;
 import software.spool.mounter.api.model.GenericRecord;
@@ -15,18 +17,22 @@ import java.util.stream.Stream;
 
 /**
  * Writes a mount result taken out of quarantine to the data mart of a mount, with the partitioning and the writer of
- * that mount, so the result lands where the mount would write it now.
+ * that mount, so the result lands where the mount would write it now, and then announces with {@link EnvelopesMounted}
+ * the partition it wrote to, as a mount does.
  */
 public class PartitioningQuarantinedResultWriter implements QuarantinedResultWriter {
     private final MountTarget target;
     private final MountPartitioning<Object> partitioning;
     private final DataMartWriter writer;
+    private final EventPublisher publisher;
 
     @SuppressWarnings("unchecked")
-    public PartitioningQuarantinedResultWriter(MountTarget target, MountPartitioning<?> partitioning, DataMartWriter writer) {
+    public PartitioningQuarantinedResultWriter(MountTarget target, MountPartitioning<?> partitioning, DataMartWriter writer,
+                                                EventPublisher publisher) {
         this.target = target;
         this.partitioning = (MountPartitioning<Object>) partitioning;
         this.writer = writer;
+        this.publisher = publisher;
     }
 
     @Override
@@ -38,7 +44,9 @@ public class PartitioningQuarantinedResultWriter implements QuarantinedResultWri
     public void write(PartitionKey partition, byte[] content) {
         PartitionedRecord<Object> result = new PartitionedRecord<>(partition,
                 GenericRecord.of(PayloadDeserializerFactory.json().asMap().deserialize(content)));
-        writer.write(target, Stream.of(new PartitionedRecord<>(destinationOf(result), result.record())));
+        PartitionKey destination = destinationOf(result);
+        writer.write(target, Stream.of(new PartitionedRecord<>(destination, result.record())));
+        publisher.publish(EnvelopesMounted.builder().dataMart(dataMart()).partitionKey(destination).build());
     }
 
     private PartitionKey destinationOf(PartitionedRecord<Object> result) {
