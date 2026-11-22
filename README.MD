@@ -123,7 +123,9 @@ Mounter mounter = MounterBuilderFactory.polling(reader)
 
 ### Reactive Mounter
 
-Triggers a mount every time an `EnvelopePersisted` event arrives on the bus.
+Mounts when what it reads has just been written: a `TRANSFORMATION` mount each time an `EnvelopePersisted` arrives on the bus, and an `AGGREGATION` mount each time an `EnvelopesMounted` says that a partition of silver holding its scope has been mounted. It ignores the mounts of gold, so a mounter of gold never reacts to its own results.
+
+Every mounter with a publisher, polling or reactive, publishes an `EnvelopesMounted` for each partition of its data mart that received results in a round, with the data mart named with its layer (`silver/payments`). A round that fails, or writes nothing, publishes none, and neither does a result sent to the quarantine.
 
 ```java
 Mounter mounter = MounterBuilderFactory.reactive(eventBus)
