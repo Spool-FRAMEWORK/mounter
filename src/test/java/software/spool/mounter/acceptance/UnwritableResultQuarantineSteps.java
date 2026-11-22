@@ -11,6 +11,7 @@ import software.spool.core.adapter.memory.InMemoryEventBus;
 import software.spool.core.adapter.memory.InMemoryQuarantineRepository;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.event.EnvelopePersisted;
+import software.spool.core.model.event.EnvelopesMounted;
 import software.spool.core.model.failure.EnvelopeQuarantined;
 import software.spool.core.model.quarantine.QuarantineLocation;
 import software.spool.core.model.quarantine.QuarantineReason;
@@ -25,6 +26,7 @@ import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.datalake.DataLakeEnvelopeRemover;
 import software.spool.core.utils.media.MediaTypes;
 import software.spool.core.utils.routing.ErrorRouter;
+import software.spool.mounter.api.MountMode;
 import software.spool.mounter.api.Mounter;
 import software.spool.mounter.api.adapter.AlwaysClosedWindowPolicy;
 import software.spool.mounter.api.adapter.AttributesPartitioning;
@@ -141,6 +143,14 @@ public class UnwritableResultQuarantineSteps {
 
     @When("the mounter mounts bronze")
     public void theMounterMountsBronze() {
+        if (target.mode() == MountMode.AGGREGATION) {
+            bus.publish(EnvelopesMounted.builder()
+                    .correlationId("mount")
+                    .dataMart(MountMode.TRANSFORMATION.qualify("orders"))
+                    .partitionKey(BRONZE_PARTITION)
+                    .build());
+            return;
+        }
         bus.publish(EnvelopePersisted.builder()
                 .correlationId("mount")
                 .idempotencyKey(IdempotencyKey.of("order-1"))
