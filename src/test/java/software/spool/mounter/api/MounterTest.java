@@ -57,4 +57,9 @@ class MounterTest {
     void checkHealth_whenStopped_returnsDegraded() {
         assertThat(mounter.checkHealth().status()).isEqualTo(HealthStatus.DEGRADED);
     }
+
+    @Test
+    void checkHealth_whenStopped_hasAnEmptyListOfChecks() {
+        assertThat(mounter.checkHealth().checks()).isNotNull().isEmpty();
+    }
 }

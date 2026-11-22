@@ -8,6 +8,7 @@ import software.spool.core.utils.polling.CancellationToken;
 import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.strategy.MountStrategy;
 
+import java.util.List;
 import java.util.Objects;
 
 public class Mounter implements SpoolModule {
@@ -47,6 +48,6 @@ public class Mounter implements SpoolModule {
 
     @Override
     public ModuleHealthPayload checkHealth() {
-        return token.isActive() ? ModuleHealthPayload.healthy(heartBeat.identity().moduleId()) : ModuleHealthPayload.degraded(heartBeat.identity().moduleId(), null);
+        return token.isActive() ? ModuleHealthPayload.healthy(heartBeat.identity().moduleId()) : ModuleHealthPayload.degraded(heartBeat.identity().moduleId(), List.of());
     }
 }
