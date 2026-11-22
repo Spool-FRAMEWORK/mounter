@@ -84,7 +84,7 @@ public class AggregateIncrementallySteps {
     }
 
     private final Map<PartitionKey, List<GenericRecord>> silver = new LinkedHashMap<>();
-    private final List<PartitionedRecord<?>> gold = new ArrayList<>();
+    private final Set<PartitionedRecord<?>> gold = new LinkedHashSet<>();
     private final Set<PartitionKey> readInLastRound = new LinkedHashSet<>();
     private final List<Exception> errors = new ArrayList<>();
     private final MovableClock clock = new MovableClock();

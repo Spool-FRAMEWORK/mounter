@@ -27,7 +27,8 @@ import java.util.stream.Stream;
  *
  * <p>The metadata of the aggregates is saved before the partitions are marked consumed, and both before anything is
  * published, so a round that fails half way neither loses records nor counts them twice. A result that fails to be
- * published stays pending and is published in a later round.</p>
+ * published stays pending, and the next round publishes it before adding anything, so the state of an aggregate never
+ * moves on from a result that may be half published.</p>
  */
 public class IncrementalMountUnitHandler<S, O> implements Handler<MountTarget> {
     private final PartitionDiscovery discovery;
@@ -63,6 +64,7 @@ public class IncrementalMountUnitHandler<S, O> implements Handler<MountTarget> {
     @Override
     public void handle(MountTarget target) throws SpoolException {
         String dataMart = target.qualifiedDataMart();
+        publishPending(target);
         List<PartitionKey> partitions = discovery.discover(target.sourceKey()).stream().map(PartitionInfo::key).toList();
         boolean inFull = partitions.stream().anyMatch(partition -> PartitionPeriod.of(partition).isEmpty());
         List<PartitionKey> toRead = inFull ? partitions : closedAndNotConsumed(dataMart, partitions);
@@ -70,7 +72,11 @@ public class IncrementalMountUnitHandler<S, O> implements Handler<MountTarget> {
                 .filter(AggregateFold::hasChanged)
                 .forEach(changed -> metadata.save(changed.metadata(clock.instant())));
         if (!inFull) metadata.markConsumed(dataMart, Set.copyOf(toRead));
-        metadata.findAll(dataMart).stream()
+        publishPending(target);
+    }
+
+    private void publishPending(MountTarget target) {
+        metadata.findAll(target.qualifiedDataMart()).stream()
                 .filter(AggregateMetadata::isPublicationPending)
                 .forEach(pending -> publish(target, pending));
     }
