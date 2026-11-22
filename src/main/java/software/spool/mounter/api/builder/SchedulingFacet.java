@@ -1,13 +1,13 @@
 package software.spool.mounter.api.builder;
 
+import software.spool.core.model.schedule.Schedule;
 import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.decorator.SafeEventPublisher;
-import software.spool.core.utils.polling.PollingPolicy;
 import software.spool.core.utils.polling.PollingScheduler;
 import software.spool.core.utils.polling.ThreadedPollingScheduler;
 
 public class SchedulingFacet<B> extends MounterFacet<B> {
-    PollingPolicy pollingPolicy;
+    Schedule schedule;
     PollingScheduler scheduler;
     EventPublisher publisher;
 
@@ -16,8 +16,8 @@ public class SchedulingFacet<B> extends MounterFacet<B> {
         this.scheduler = new ThreadedPollingScheduler();
     }
 
-    public SchedulingFacet<B> pollingWith(PollingPolicy pollingPolicy) {
-        this.pollingPolicy = pollingPolicy;
+    public SchedulingFacet<B> pollingWith(Schedule schedule) {
+        this.schedule = schedule;
         return this;
     }
 

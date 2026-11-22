@@ -48,7 +48,7 @@ class PollingMounterAssembler {
                 .add(new ObservedStep<>("dispatch-units", new DispatchUnitsStep(seq, distributed, unitHandler)));
 
         MountStrategy strategy = new PollingMountStrategy(effectiveTarget, new AtomicMountHandler(pipeline), router,
-                b.scheduling.scheduler, b.scheduling.pollingPolicy);
+                b.scheduling.scheduler, b.scheduling.schedule);
         return new Mounter(strategy, router, b.heartBeat);
     }
 }
