@@ -5,15 +5,18 @@ import software.spool.core.port.bus.Handler;
 import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.MountMode;
 import software.spool.mounter.api.port.AggregateMetadataRepository;
+import software.spool.mounter.api.port.DataMartWriter;
 import software.spool.mounter.api.port.IncrementalMountAggregator;
 import software.spool.mounter.api.port.MountAggregator;
 import software.spool.mounter.api.port.MountPartitioning;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedReader;
+import software.spool.mounter.internal.control.AnnouncingMountUnitHandler;
 import software.spool.mounter.internal.control.steps.IncrementalMountUnitHandler;
 import software.spool.mounter.internal.control.steps.MissingPartitionAttributeHandler;
 import software.spool.mounter.internal.control.steps.MountUnitHandler;
 import software.spool.mounter.internal.control.steps.RoutingMissingPartitionAttributeHandler;
+import software.spool.mounter.internal.decorator.PartitionRecordingDataMartWriter;
 import software.spool.mounter.internal.decorator.SafeDataMartWriter;
 import software.spool.mounter.internal.decorator.SafeMountAggregator;
 import software.spool.mounter.internal.decorator.SafePartitionDiscovery;
@@ -42,18 +45,25 @@ class MountUnitHandlerAssembler {
         MountPartitioning<? super O> partitioning = (MountPartitioning<? super O>) mount.partitioning;
         MissingPartitionAttributeHandler missingAttributeHandler =
                 missingAttributeHandler(recordQuarantine, quarantine.resultQuarantineFor(publisher), router);
+        PartitionRecordingDataMartWriter writer = new PartitionRecordingDataMartWriter(SafeDataMartWriter.of(mount.writer));
         Optional<AggregateMetadataRepository> aggregateMetadata = checkpoint.aggregateMetadata();
-        if (aggregateMetadata.isPresent()) {
-            return incremental(safeReader, aggregator, target, mount, checkpoint, aggregateMetadata.get(), partitioning,
-                    missingAttributeHandler);
-        }
-        return new MountUnitHandler<>(safeReader, SafeMountAggregator.of(aggregator), SafeDataMartWriter.of(mount.writer),
-                checkpoint.windowPolicy, checkpoint.checkpoint, partitioning, missingAttributeHandler);
+        Handler<MountTarget> handler = aggregateMetadata.isPresent()
+                ? incremental(safeReader, aggregator, target, mount, writer, checkpoint, aggregateMetadata.get(),
+                        partitioning, missingAttributeHandler)
+                : new MountUnitHandler<>(safeReader, SafeMountAggregator.of(aggregator), writer,
+                        checkpoint.windowPolicy, checkpoint.checkpoint, partitioning, missingAttributeHandler);
+        return announcing(handler, writer, Optional.ofNullable(publisher));
+    }
+
+    private static Handler<MountTarget> announcing(Handler<MountTarget> handler, PartitionRecordingDataMartWriter writer,
+                                                   Optional<EventPublisher> publisher) {
+        return publisher.<Handler<MountTarget>>map(present -> new AnnouncingMountUnitHandler(handler, writer, present))
+                .orElse(handler);
     }
 
     private static <O> Handler<MountTarget> incremental(PartitionedReader reader, MountAggregator<O> aggregator,
                                                         MountTarget target, MountFacet<?> mount,
-                                                        CheckpointFacet<?> checkpoint,
+                                                        DataMartWriter writer, CheckpointFacet<?> checkpoint,
                                                         AggregateMetadataRepository aggregateMetadata,
                                                         MountPartitioning<? super O> partitioning,
                                                         MissingPartitionAttributeHandler missingAttributeHandler) {
@@ -67,7 +77,7 @@ class MountUnitHandlerAssembler {
         Objects.requireNonNull(mount.remover, "DataMartRemover required to aggregate incrementally; set it with mount().removingWith(...)");
         return new IncrementalMountUnitHandler<>(SafePartitionDiscovery.of(checkpoint.partitionDiscovery()), reader,
                 incrementalAggregator, aggregateMetadata, checkpoint.incrementalWindowPolicy(),
-                SafeDataMartWriter.of(mount.writer), mount.remover, partitioning, missingAttributeHandler,
+                writer, mount.remover, partitioning, missingAttributeHandler,
                 Clock.systemUTC());
     }
 
