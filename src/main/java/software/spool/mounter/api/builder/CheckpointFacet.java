@@ -5,7 +5,6 @@ import software.spool.mounter.api.port.*;
 public class CheckpointFacet<B> extends MounterFacet<B> {
     PartitionWindowPolicy windowPolicy;
     MountCheckpoint checkpoint;
-    MountCursor cursor;
 
     CheckpointFacet(B parent) { super(parent); }
 
@@ -16,11 +15,6 @@ public class CheckpointFacet<B> extends MounterFacet<B> {
 
     public CheckpointFacet<B> checkpoint(MountCheckpoint checkpoint) {
         this.checkpoint = checkpoint;
-        return this;
-    }
-
-    public CheckpointFacet<B> cursor(MountCursor cursor) {
-        this.cursor = cursor;
         return this;
     }
 }
