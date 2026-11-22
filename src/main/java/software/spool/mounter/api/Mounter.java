@@ -1,5 +1,6 @@
 package software.spool.mounter.api;
 
+import software.spool.core.port.health.HealthProvider;
 import software.spool.core.model.spool.SpoolModule;
 import software.spool.core.model.spool.SpoolNode;
 import software.spool.core.port.health.ModuleHealthPayload;
@@ -21,6 +22,7 @@ public class Mounter implements SpoolModule {
         this.strategy = strategy;
         this.errorRouter = errorRouter;
         this.heartBeat = heartBeat;
+        heartBeat.reportFrom(this);
         this.token = CancellationToken.NOOP;
     }
 
@@ -44,6 +46,11 @@ public class Mounter implements SpoolModule {
         token.cancel();
         heartBeat.stop();
         token = CancellationToken.NOOP;
+    }
+
+    @Override
+    public void reportHealthFrom(HealthProvider health) {
+        heartBeat.reportFrom(health);
     }
 
     @Override
