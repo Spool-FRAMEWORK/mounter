@@ -3,6 +3,7 @@ package software.spool.mounter.api.builder;
 import software.spool.core.pipeline.ObservedStep;
 import software.spool.core.pipeline.Pipeline;
 import software.spool.core.pipeline.PipelineContext;
+import software.spool.core.port.bus.Handler;
 import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.Mounter;
 import software.spool.mounter.api.adapter.SequentialPartitionDispatcher;
@@ -26,7 +27,7 @@ class PollingMounterAssembler {
                 ? b.mount.target.withSourceKey(b.mount.scope)
                 : b.mount.target;
 
-        MountUnitHandler<R> unitHandler = MountUnitHandlerAssembler.assemble(b.reader, b.aggregator, effectiveTarget,
+        Handler<MountTarget> unitHandler = MountUnitHandlerAssembler.assemble(b.reader, b.aggregator, effectiveTarget,
                 b.mount, b.checkpoint, b.validation, b.quarantine, b.scheduling.publisher, router);
 
         PartitionDiscovery discovery = SafePartitionDiscovery.of(
