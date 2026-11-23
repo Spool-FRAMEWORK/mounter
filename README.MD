@@ -177,7 +177,7 @@ Mounter mounter = MounterBuilderFactory.<Object, Average>polling(reader)
         .build();
 ```
 
-Each round lists the partitions of the scope with the `PartitionDiscovery` and reads only the closed ones the data mart has not consumed. A partition is closed when its last date entry has ended and a margin has passed: `CheckpointFacet.DEFAULT_CLOSING_MARGIN` (15 minutes) unless `windowPolicy(...)` sets another, such as `new DatedPartitionWindowPolicy(clock, Duration.ofHours(1))`. Records that reach a partition after it closes do not reach gold. A scope with a partition without a date is aggregated again in full in every round.
+Each round lists the partitions of the scope with the `PartitionDiscovery` and reads only the closed ones the data mart has not consumed. A partition is closed when its last date entry has ended and a margin has passed: `CheckpointFacet.DEFAULT_CLOSING_MARGIN` (15 minutes) unless `windowPolicy(...)` sets another, such as `new DatedPartitionWindowPolicy(clock, Duration.ofHours(1))`. A descriptor sets it with `read.closingMargin`. Records that reach a partition after it closes do not reach gold. A scope with a partition without a date is aggregated again in full in every round.
 
 The `AggregateMetadataRepository` keeps, for each aggregate, the partitions of silver it comes from, how many records it has added, when it changed and the state of its aggregator. The result of an aggregate that changes replaces its previous result, which the `DataMartRemover` removes, so the data mart has a single result per aggregate. The metadata is saved before anything is published, and a result that fails to be published is published in the next round.
 
