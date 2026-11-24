@@ -34,7 +34,8 @@ class ReactiveMounterAssembler {
                 .add(new ObservedStep<>("discover-partitions",  new DiscoverPartitionsStep(SafePartitionDiscovery.of(scope -> List.of(PartitionInfo.of(scope))))))
                 .add(new ObservedStep<>("resolve-scaling-plan", new ResolveScalingPlanStep(SafeScalingPolicy.of(partitions -> ScalingPlan.sequential()))))
                 .add(new ObservedStep<>("build-mount-units",    new BuildMountUnitsStep(null)))
-                .add(new ObservedStep<>("dispatch-units",       new DispatchUnitsStep(seq, seq, unitHandler)));
+                .add(new ObservedStep<>("dispatch-units",       MountUnitHandlerAssembler.asRound(
+                        new DispatchUnitsStep(seq, seq, unitHandler), b.mount, b.checkpoint)));
 
         MountStrategy strategy = new ReactiveMountStrategy(b.mount.target, b.bus,
                 new AtomicMountHandler(pipeline), router);

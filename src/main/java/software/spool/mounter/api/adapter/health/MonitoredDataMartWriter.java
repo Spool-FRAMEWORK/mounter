@@ -26,12 +26,17 @@ public final class MonitoredDataMartWriter implements DataMartWriter {
     }
 
     @Override
-    public void keepOnlyWhatWasWritten(MountTarget target) {
-        monitor.run(() -> delegate.keepOnlyWhatWasWritten(target));
+    public void beginRound(MountTarget target) {
+        monitor.run(() -> delegate.beginRound(target));
     }
 
     @Override
-    public void forgetWhatWasWritten(MountTarget target) {
-        delegate.forgetWhatWasWritten(target);
+    public void completeRound(MountTarget target) {
+        monitor.run(() -> delegate.completeRound(target));
+    }
+
+    @Override
+    public void abandonRound(MountTarget target) {
+        monitor.run(() -> delegate.abandonRound(target));
     }
 }

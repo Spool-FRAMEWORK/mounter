@@ -46,7 +46,8 @@ class PollingMounterAssembler {
                 .add(new ObservedStep<>("discover-partitions", new DiscoverPartitionsStep(discovery)))
                 .add(new ObservedStep<>("resolve-scaling-plan", new ResolveScalingPlanStep(scalingPolicy)))
                 .add(new ObservedStep<>("build-mount-units", new BuildMountUnitsStep(splitter)))
-                .add(new ObservedStep<>("dispatch-units", new DispatchUnitsStep(seq, distributed, unitHandler)));
+                .add(new ObservedStep<>("dispatch-units", MountUnitHandlerAssembler.asRound(
+                        new DispatchUnitsStep(seq, distributed, unitHandler), b.mount, b.checkpoint)));
 
         MountStrategy strategy = new PollingMountStrategy(effectiveTarget, new AtomicMountHandler(pipeline), router,
                 b.scheduling.scheduler, b.scheduling.schedule);

@@ -36,12 +36,17 @@ public class PartitionRecordingDataMartWriter implements DataMartWriter {
     }
 
     @Override
-    public void keepOnlyWhatWasWritten(MountTarget target) {
-        writer.keepOnlyWhatWasWritten(target);
+    public void beginRound(MountTarget target) {
+        writer.beginRound(target);
     }
 
     @Override
-    public void forgetWhatWasWritten(MountTarget target) {
-        writer.forgetWhatWasWritten(target);
+    public void completeRound(MountTarget target) {
+        writer.completeRound(target);
+    }
+
+    @Override
+    public void abandonRound(MountTarget target) {
+        writer.abandonRound(target);
     }
 }

@@ -1,5 +1,7 @@
 package software.spool.mounter.api.builder;
 
+import software.spool.core.pipeline.PipelineContext;
+import software.spool.core.pipeline.Step;
 import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.bus.Handler;
 import software.spool.core.utils.routing.ErrorRouter;
@@ -12,8 +14,7 @@ import software.spool.mounter.api.port.MountPartitioning;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedReader;
 import software.spool.mounter.internal.control.AnnouncingMountUnitHandler;
-import software.spool.mounter.internal.control.PartitionReplacingMountUnitHandler;
-import software.spool.mounter.internal.control.WrittenResultsForgettingMountUnitHandler;
+import software.spool.mounter.internal.control.steps.FullMountRoundStep;
 import software.spool.mounter.internal.control.steps.IncrementalMountUnitHandler;
 import software.spool.mounter.internal.control.steps.MissingPartitionAttributeHandler;
 import software.spool.mounter.internal.control.steps.MountUnitHandler;
@@ -52,9 +53,20 @@ class MountUnitHandlerAssembler {
         Handler<MountTarget> handler = aggregateMetadata.isPresent()
                 ? incremental(safeReader, aggregator, target, mount, writer, checkpoint, aggregateMetadata.get(),
                         partitioning, missingAttributeHandler)
-                : new PartitionReplacingMountUnitHandler(new MountUnitHandler<>(safeReader, SafeMountAggregator.of(aggregator),
-                        writer, checkpoint.windowPolicy, checkpoint.checkpoint, partitioning, missingAttributeHandler), writer);
+                : new MountUnitHandler<>(safeReader, SafeMountAggregator.of(aggregator), writer,
+                        checkpoint.windowPolicy, checkpoint.checkpoint, partitioning, missingAttributeHandler);
         return announcing(handler, writer, Optional.ofNullable(publisher));
+    }
+
+    /**
+     * A full mount dispatches its units as one round of its writer, so what it no longer writes is removed; an
+     * incremental mount replaces its results on its own.
+     */
+    static Step<PipelineContext, PipelineContext> asRound(Step<PipelineContext, PipelineContext> dispatch,
+                                                         MountFacet<?> mount, CheckpointFacet<?> checkpoint) {
+        return checkpoint.aggregateMetadata().isPresent()
+                ? dispatch
+                : new FullMountRoundStep(dispatch, SafeDataMartWriter.of(mount.writer));
     }
 
     private static Handler<MountTarget> announcing(Handler<MountTarget> handler, PartitionRecordingDataMartWriter writer,
@@ -77,10 +89,10 @@ class MountUnitHandlerAssembler {
             throw new IllegalStateException("Aggregate metadata is only used by an AGGREGATION mount");
         }
         Objects.requireNonNull(mount.remover, "DataMartRemover required to aggregate incrementally; set it with mount().removingWith(...)");
-        return new WrittenResultsForgettingMountUnitHandler(new IncrementalMountUnitHandler<>(
-                SafePartitionDiscovery.of(checkpoint.partitionDiscovery()), reader, incrementalAggregator, aggregateMetadata,
-                checkpoint.incrementalWindowPolicy(), writer, mount.remover, partitioning, missingAttributeHandler,
-                Clock.systemUTC()), writer);
+        return new IncrementalMountUnitHandler<>(SafePartitionDiscovery.of(checkpoint.partitionDiscovery()), reader,
+                incrementalAggregator, aggregateMetadata, checkpoint.incrementalWindowPolicy(),
+                writer, mount.remover, partitioning, missingAttributeHandler,
+                Clock.systemUTC());
     }
 
     private static MissingPartitionAttributeHandler missingAttributeHandler(Optional<DataLakeRecordQuarantine> recordQuarantine,

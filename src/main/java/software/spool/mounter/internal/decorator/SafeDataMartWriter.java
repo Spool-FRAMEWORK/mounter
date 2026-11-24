@@ -25,13 +25,18 @@ public class SafeDataMartWriter<O> implements DataMartWriter {
     }
 
     @Override
-    public void keepOnlyWhatWasWritten(MountTarget target) {
-        safely(target, () -> writer.keepOnlyWhatWasWritten(target));
+    public void beginRound(MountTarget target) {
+        safely(target, () -> writer.beginRound(target));
     }
 
     @Override
-    public void forgetWhatWasWritten(MountTarget target) {
-        writer.forgetWhatWasWritten(target);
+    public void completeRound(MountTarget target) {
+        safely(target, () -> writer.completeRound(target));
+    }
+
+    @Override
+    public void abandonRound(MountTarget target) {
+        safely(target, () -> writer.abandonRound(target));
     }
 
     private static void safely(MountTarget target, Runnable writing) {
