@@ -24,4 +24,14 @@ public final class MonitoredDataMartWriter implements DataMartWriter {
     public void write(MountTarget target, Stream<PartitionedRecord<?>> result) {
         monitor.run(() -> delegate.write(target, monitor.given(result)));
     }
+
+    @Override
+    public void keepOnlyWhatWasWritten(MountTarget target) {
+        monitor.run(() -> delegate.keepOnlyWhatWasWritten(target));
+    }
+
+    @Override
+    public void forgetWhatWasWritten(MountTarget target) {
+        delegate.forgetWhatWasWritten(target);
+    }
 }

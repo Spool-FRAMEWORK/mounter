@@ -21,8 +21,22 @@ public class SafeDataMartWriter<O> implements DataMartWriter {
 
     @Override
     public void write(MountTarget target, Stream<PartitionedRecord<?>> result) {
+        safely(target, () -> writer.write(target, result));
+    }
+
+    @Override
+    public void keepOnlyWhatWasWritten(MountTarget target) {
+        safely(target, () -> writer.keepOnlyWhatWasWritten(target));
+    }
+
+    @Override
+    public void forgetWhatWasWritten(MountTarget target) {
+        writer.forgetWhatWasWritten(target);
+    }
+
+    private static void safely(MountTarget target, Runnable writing) {
         try {
-            writer.write(target, result);
+            writing.run();
         } catch (SpoolException e) {
             throw e;
         } catch (Exception e) {

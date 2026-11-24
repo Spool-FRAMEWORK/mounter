@@ -34,4 +34,14 @@ public class PartitionRecordingDataMartWriter implements DataMartWriter {
         Set<PartitionKey> partitions = written.remove(target);
         return partitions == null ? Set.of() : Set.copyOf(partitions);
     }
+
+    @Override
+    public void keepOnlyWhatWasWritten(MountTarget target) {
+        writer.keepOnlyWhatWasWritten(target);
+    }
+
+    @Override
+    public void forgetWhatWasWritten(MountTarget target) {
+        writer.forgetWhatWasWritten(target);
+    }
 }

@@ -45,7 +45,11 @@ public class PartitioningQuarantinedResultWriter implements QuarantinedResultWri
         PartitionedRecord<Object> result = new PartitionedRecord<>(partition,
                 GenericRecord.of(PayloadDeserializerFactory.json().asMap().deserialize(content)));
         PartitionKey destination = destinationOf(result);
-        writer.write(target, Stream.of(new PartitionedRecord<>(destination, result.record())));
+        try {
+            writer.write(target, Stream.of(new PartitionedRecord<>(destination, result.record())));
+        } finally {
+            writer.forgetWhatWasWritten(target);
+        }
         publisher.publish(EnvelopesMounted.builder().dataMart(dataMart()).partitionKey(destination).build());
     }
 

@@ -12,6 +12,8 @@ import software.spool.mounter.api.port.MountPartitioning;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedReader;
 import software.spool.mounter.internal.control.AnnouncingMountUnitHandler;
+import software.spool.mounter.internal.control.PartitionReplacingMountUnitHandler;
+import software.spool.mounter.internal.control.WrittenResultsForgettingMountUnitHandler;
 import software.spool.mounter.internal.control.steps.IncrementalMountUnitHandler;
 import software.spool.mounter.internal.control.steps.MissingPartitionAttributeHandler;
 import software.spool.mounter.internal.control.steps.MountUnitHandler;
@@ -50,8 +52,8 @@ class MountUnitHandlerAssembler {
         Handler<MountTarget> handler = aggregateMetadata.isPresent()
                 ? incremental(safeReader, aggregator, target, mount, writer, checkpoint, aggregateMetadata.get(),
                         partitioning, missingAttributeHandler)
-                : new MountUnitHandler<>(safeReader, SafeMountAggregator.of(aggregator), writer,
-                        checkpoint.windowPolicy, checkpoint.checkpoint, partitioning, missingAttributeHandler);
+                : new PartitionReplacingMountUnitHandler(new MountUnitHandler<>(safeReader, SafeMountAggregator.of(aggregator),
+                        writer, checkpoint.windowPolicy, checkpoint.checkpoint, partitioning, missingAttributeHandler), writer);
         return announcing(handler, writer, Optional.ofNullable(publisher));
     }
 
@@ -75,10 +77,10 @@ class MountUnitHandlerAssembler {
             throw new IllegalStateException("Aggregate metadata is only used by an AGGREGATION mount");
         }
         Objects.requireNonNull(mount.remover, "DataMartRemover required to aggregate incrementally; set it with mount().removingWith(...)");
-        return new IncrementalMountUnitHandler<>(SafePartitionDiscovery.of(checkpoint.partitionDiscovery()), reader,
-                incrementalAggregator, aggregateMetadata, checkpoint.incrementalWindowPolicy(),
-                writer, mount.remover, partitioning, missingAttributeHandler,
-                Clock.systemUTC());
+        return new WrittenResultsForgettingMountUnitHandler(new IncrementalMountUnitHandler<>(
+                SafePartitionDiscovery.of(checkpoint.partitionDiscovery()), reader, incrementalAggregator, aggregateMetadata,
+                checkpoint.incrementalWindowPolicy(), writer, mount.remover, partitioning, missingAttributeHandler,
+                Clock.systemUTC()), writer);
     }
 
     private static MissingPartitionAttributeHandler missingAttributeHandler(Optional<DataLakeRecordQuarantine> recordQuarantine,
