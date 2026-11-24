@@ -67,6 +67,38 @@ class MonitoredMounterPortsTest {
     }
 
     @Test
+    void writer_roundThatEndsAfterARecordCouldNotBeRead_leavesThePieceUnhealthy() {
+        PartitionedReader reader = new MonitoredPartitionedReader(target -> Stream.of(RECORD).map(record -> {
+            throw new IllegalStateException("the file payment-1.json could not be read");
+        }), monitor);
+        DataMartWriter writer = new MonitoredDataMartWriter((target, result) -> result.forEach(record -> {
+        }), monitor);
+        writer.beginRound(TARGET);
+
+        assertThatThrownBy(() -> reader.read(TARGET).toList()).isInstanceOf(IllegalStateException.class);
+        writer.abandonRound(TARGET);
+
+        assertThat(monitor.health().status()).isEqualTo(HealthStatus.UNHEALTHY);
+    }
+
+    @Test
+    void writer_whenItCannotEndARound_marksThePieceUnhealthy() {
+        DataMartWriter writer = new MonitoredDataMartWriter(new DataMartWriter() {
+            @Override
+            public void write(MountTarget target, Stream<PartitionedRecord<?>> result) {
+            }
+
+            @Override
+            public void completeRound(MountTarget target) {
+                throw new IllegalStateException("the list of the mount could not be written");
+            }
+        }, monitor);
+
+        assertThatThrownBy(() -> writer.completeRound(TARGET)).hasMessage("the list of the mount could not be written");
+        assertThat(monitor.health().status()).isEqualTo(HealthStatus.UNHEALTHY);
+    }
+
+    @Test
     void remover_whenItCannotRemove_marksThePieceUnhealthy() {
         MonitoredDataMartRemover remover = new MonitoredDataMartRemover((target, result) -> {
             throw new IllegalStateException("the object could not be deleted");

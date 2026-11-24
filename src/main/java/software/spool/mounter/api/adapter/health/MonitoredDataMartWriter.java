@@ -10,6 +10,10 @@ import java.util.stream.Stream;
 /**
  * Writes the results of a mount through another writer and tells its {@link PieceMonitor} how each write went. A
  * failure while the results are produced, such as a read of the source, is not blamed on the data mart.
+ *
+ * <p>Beginning and ending a round only tell the monitor when they fail. A round ends after whatever happened in it,
+ * such as a record that could not be read, and its bookkeeping working says nothing about that, so it must not leave
+ * the piece healthy again.</p>
  */
 public final class MonitoredDataMartWriter implements DataMartWriter {
     private final DataMartWriter delegate;
@@ -27,16 +31,26 @@ public final class MonitoredDataMartWriter implements DataMartWriter {
 
     @Override
     public void beginRound(MountTarget target) {
-        monitor.run(() -> delegate.beginRound(target));
+        reportingFailures(() -> delegate.beginRound(target));
     }
 
     @Override
     public void completeRound(MountTarget target) {
-        monitor.run(() -> delegate.completeRound(target));
+        reportingFailures(() -> delegate.completeRound(target));
     }
 
     @Override
     public void abandonRound(MountTarget target) {
-        monitor.run(() -> delegate.abandonRound(target));
+        reportingFailures(() -> delegate.abandonRound(target));
+    }
+
+    private void reportingFailures(Runnable roundStep) {
+        try {
+            roundStep.run();
+        } catch (RuntimeException e) {
+            monitor.run(() -> {
+                throw e;
+            });
+        }
     }
 }
