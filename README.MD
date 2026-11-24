@@ -119,6 +119,13 @@ Mounter mounter = MounterBuilderFactory.polling(reader)
         .build();
 ```
 
+A full mount, one that is not incremental, writes every result again in each round. When a round ends well, each
+partition it wrote keeps only the results of that round, so a total that changes from 35 to 40 does not leave the 35
+behind, and a record that left bronze leaves silver too. A round that fails removes nothing, and a partition the round
+does not write keeps what it had. The writer does it with `keepOnlyWhatWasWritten`, which the file system and S3
+writers implement by noting the files they write; a writer of its own that does not implement it keeps everything, as
+before. A partition of a data mart must be written by a single mounter, or each one would remove what the other wrote.
+
 ---
 
 ### Reactive Mounter
