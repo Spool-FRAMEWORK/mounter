@@ -119,12 +119,18 @@ Mounter mounter = MounterBuilderFactory.polling(reader)
         .build();
 ```
 
-A full mount, one that is not incremental, writes every result again in each round. When a round ends well, each
-partition it wrote keeps only the results of that round, so a total that changes from 35 to 40 does not leave the 35
-behind, and a record that left bronze leaves silver too. A round that fails removes nothing, and a partition the round
-does not write keeps what it had. The writer does it with `keepOnlyWhatWasWritten`, which the file system and S3
-writers implement by noting the files they write; a writer of its own that does not implement it keeps everything, as
-before. A partition of a data mart must be written by a single mounter, or each one would remove what the other wrote.
+A full mount, one that is not incremental, writes every result again in each round, and the dispatch of all its units
+is one round of its writer (`beginRound`, `completeRound`, `abandonRound`). The file system, raw file system and S3
+writers keep, under `.spool/written/` in the data mart and out of `silver/` and `gold/`, the list of what each mount
+wrote. When a round ends well, what the mount wrote before and did not write again is removed, wherever it was: a
+total that changes from 35 to 40 does not leave the 35 behind, a record that left bronze leaves silver too, and a
+partition that no longer gets results is left without them. Nothing outside the list of the mount is ever touched, so
+mounts that write to the same partition keep each other's results. A round that fails removes nothing and adds what
+it wrote to the list, and a round whose process stops is taken into account by the next one, because an open round is
+saved every thousand objects. A mount runs one round at a time wherever it runs, replicas included: a round takes the
+turn of its mount, an object only one round can create, waits while another round holds it and renews it while it is
+open, and a turn that is not renewed for ten minutes is taken by the next round. A writer of its own that does not
+implement the rounds keeps everything, as before.
 
 ---
 
