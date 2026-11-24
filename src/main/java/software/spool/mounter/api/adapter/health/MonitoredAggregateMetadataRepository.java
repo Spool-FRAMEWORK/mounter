@@ -3,6 +3,7 @@ package software.spool.mounter.api.adapter.health;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.health.PieceMonitor;
 import software.spool.mounter.api.model.AggregateMetadata;
+import software.spool.mounter.api.model.ConsumedPartition;
 import software.spool.mounter.api.port.AggregateMetadataRepository;
 
 import java.util.List;
@@ -38,12 +39,12 @@ public final class MonitoredAggregateMetadataRepository implements AggregateMeta
     }
 
     @Override
-    public Set<PartitionKey> consumedSources(String dataMart) {
+    public Set<ConsumedPartition> consumedSources(String dataMart) {
         return monitor.call(() -> delegate.consumedSources(dataMart));
     }
 
     @Override
-    public void markConsumed(String dataMart, Set<PartitionKey> sources) {
+    public void markConsumed(String dataMart, Set<ConsumedPartition> sources) {
         monitor.run(() -> delegate.markConsumed(dataMart, sources));
     }
 }

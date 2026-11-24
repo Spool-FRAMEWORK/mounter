@@ -1,29 +1,41 @@
 package software.spool.mounter.acceptance;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.cucumber.datatable.DataTable;
+import io.cucumber.java.After;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
+import software.spool.core.model.Event;
 import software.spool.core.model.schedule.Schedule;
 import software.spool.core.model.spool.SpoolNode;
 import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
+import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.utils.routing.ErrorRouter;
 import software.spool.mounter.api.Mounter;
 import software.spool.mounter.api.adapter.AlwaysClosedWindowPolicy;
 import software.spool.mounter.api.adapter.DatedPartitionWindowPolicy;
 import software.spool.mounter.api.adapter.InMemoryAggregateMetadataRepository;
 import software.spool.mounter.api.adapter.NoOpMountCheckpoint;
+import software.spool.mounter.api.adapter.PartitioningQuarantinedResultWriter;
+import software.spool.mounter.api.adapter.SameAsSourcePartitioning;
 import software.spool.mounter.api.builder.MounterBuilderFactory;
 import software.spool.mounter.api.builder.PollingMounterBuilder;
 import software.spool.mounter.api.model.AggregateMetadata;
+import software.spool.mounter.api.model.ConsumedPartition;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.IncrementalMountAggregator;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedRecord;
 import software.spool.mounter.api.port.scaling.PartitionInfo;
+import software.spool.mounter.internal.control.steps.IncrementalMountUnitHandler;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -95,8 +107,13 @@ public class AggregateIncrementallySteps {
     private final MountRound mountRound;
     private Runnable round;
 
+    private final Logger mounterLog = (Logger) org.slf4j.LoggerFactory.getLogger(IncrementalMountUnitHandler.class);
+    private final ListAppender<ILoggingEvent> log = new ListAppender<>();
+
     public AggregateIncrementallySteps(MountRound mountRound) {
         this.mountRound = mountRound;
+        log.start();
+        mounterLog.addAppender(log);
     }
 
     @Given("aggregate metadata in memory")
@@ -145,11 +162,64 @@ public class AggregateIncrementallySteps {
     }
 
     @Given("the mounter has mounted once")
+    @Given("the mounter has mounted again")
     @When("the mounter mounts again")
     public void theMounterMounts() {
         if (round == null) start();
         readInLastRound.clear();
         round.run();
+    }
+
+    @Given("the mounter has mounted once without keeping how many files each partition had")
+    public void theMounterHasMountedOnceWithoutKeepingHowManyFilesEachPartitionHad() {
+        theMounterMounts();
+        InMemoryAggregateMetadataRepository repository = metadata.orElseThrow();
+        repository.markConsumed(GOLD, repository.consumedSources(GOLD).stream()
+                .map(consumed -> ConsumedPartition.withoutFiles(consumed.partition()))
+                .collect(Collectors.toSet()));
+    }
+
+    @Given("a payment taken out of the quarantine is written back to the partition {string} of silver:")
+    public void aPaymentTakenOutOfTheQuarantineIsWrittenBack(String partition, DataTable payments) {
+        PartitioningQuarantinedResultWriter quarantinedResults = new PartitioningQuarantinedResultWriter(
+                MountTarget.transformation("payments", SCOPE), new SameAsSourcePartitioning<>(),
+                (target, results) -> results.forEach(result -> silver
+                        .computeIfAbsent(result.partitionKey(), ignored -> new ArrayList<>())
+                        .add((GenericRecord) result.record())),
+                new EventPublisher() {
+                    public <E extends Event> void publish(E event) { }
+                });
+        payments.asMaps().forEach(payment -> quarantinedResults.write(silverPartition(partition),
+                ("{\"country\":\"" + payment.get("country") + "\",\"amount\":" + payment.get("amount") + "}")
+                        .getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Then("the mounter reads no partition")
+    public void theMounterReadsNoPartition() {
+        assertThat(readInLastRound).isEmpty();
+    }
+
+    @Then("the mounter warns that the partition {string} changed after it was read")
+    public void theMounterWarnsThatThePartitionChanged(String partition) {
+        assertThat(warnings()).anySatisfy(warning -> assertThat(warning).contains(silverPartition(partition).value()));
+    }
+
+    @Then("the mounter does not warn that any partition changed")
+    public void theMounterDoesNotWarnThatAnyPartitionChanged() {
+        assertThat(warnings()).isEmpty();
+    }
+
+    @After
+    public void stopListeningToTheLog() {
+        mounterLog.detachAppender(log);
+        log.stop();
+    }
+
+    private List<String> warnings() {
+        return log.list.stream()
+                .filter(event -> event.getLevel() == Level.WARN)
+                .map(ILoggingEvent::getFormattedMessage)
+                .toList();
     }
 
     @Then("the mounter reads only the partition {string}")
@@ -228,9 +298,9 @@ public class AggregateIncrementallySteps {
                 repository -> builder.checkpoint()
                         .windowPolicy(new DatedPartitionWindowPolicy(clock, closingMargin))
                         .checkpoint(new NoOpMountCheckpoint())
-                        .aggregatingIncrementally(repository, scope -> silver.keySet().stream()
-                                .filter(partition -> partition.value().startsWith(scope.value()))
-                                .map(PartitionInfo::of)
+                        .aggregatingIncrementally(repository, scope -> silver.entrySet().stream()
+                                .filter(partition -> partition.getKey().value().startsWith(scope.value()))
+                                .map(partition -> PartitionInfo.of(partition.getKey(), partition.getValue().size(), 0))
                                 .toList()),
                 () -> builder.checkpoint().windowPolicy(new AlwaysClosedWindowPolicy()).checkpoint(new NoOpMountCheckpoint()));
         Mounter mounter = builder.build();
